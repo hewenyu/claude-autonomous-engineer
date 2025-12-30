@@ -1,4 +1,6 @@
 {
+  "_comment": "Hook 命令使用内联 bash 脚本自动查找项目根目录，支持 submodule 场景",
+  
   "hooks": {
     "UserPromptSubmit": [
       {
@@ -6,7 +8,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 .claude/hooks/inject_state.py",
+            "command": "bash -c 'R=$(git rev-parse --show-toplevel 2>/dev/null || pwd); while [ ! -d \"$R/.claude\" ] && [ \"$R\" != \"/\" ]; do R=$(dirname \"$R\"); done; S=$(git rev-parse --show-superproject-working-tree 2>/dev/null); [ -n \"$S\" ] && [ -d \"$S/.claude\" ] && R=\"$S\"; if [ -f \"$R/.claude/hooks/inject_state.py\" ]; then cd \"$R\" && python3 .claude/hooks/inject_state.py; else echo \"{\\\"hookSpecificOutput\\\":{\\\"additionalContext\\\":\\\"\\\"}}\"; fi'",
             "timeout": 5000
           }
         ]
@@ -19,7 +21,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 .claude/hooks/codex_review_gate.py",
+            "command": "bash -c 'R=$(git rev-parse --show-toplevel 2>/dev/null || pwd); while [ ! -d \"$R/.claude\" ] && [ \"$R\" != \"/\" ]; do R=$(dirname \"$R\"); done; S=$(git rev-parse --show-superproject-working-tree 2>/dev/null); [ -n \"$S\" ] && [ -d \"$S/.claude\" ] && R=\"$S\"; if [ -f \"$R/.claude/hooks/codex_review_gate.py\" ]; then cd \"$R\" && python3 .claude/hooks/codex_review_gate.py; else echo \"{\\\"decision\\\":\\\"allow\\\"}\"; fi'",
             "timeout": 180000
           }
         ]
@@ -32,7 +34,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 .claude/hooks/progress_sync.py",
+            "command": "bash -c 'R=$(git rev-parse --show-toplevel 2>/dev/null || pwd); while [ ! -d \"$R/.claude\" ] && [ \"$R\" != \"/\" ]; do R=$(dirname \"$R\"); done; S=$(git rev-parse --show-superproject-working-tree 2>/dev/null); [ -n \"$S\" ] && [ -d \"$S/.claude\" ] && R=\"$S\"; if [ -f \"$R/.claude/hooks/progress_sync.py\" ]; then cd \"$R\" && python3 .claude/hooks/progress_sync.py; else echo \"{\\\"status\\\":\\\"ok\\\"}\"; fi'",
             "timeout": 5000
           }
         ]
@@ -45,7 +47,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 .claude/hooks/loop_driver.py",
+            "command": "bash -c 'R=$(git rev-parse --show-toplevel 2>/dev/null || pwd); while [ ! -d \"$R/.claude\" ] && [ \"$R\" != \"/\" ]; do R=$(dirname \"$R\"); done; S=$(git rev-parse --show-superproject-working-tree 2>/dev/null); [ -n \"$S\" ] && [ -d \"$S/.claude\" ] && R=\"$S\"; if [ -f \"$R/.claude/hooks/loop_driver.py\" ]; then cd \"$R\" && python3 .claude/hooks/loop_driver.py; else echo \"{\\\"decision\\\":\\\"allow\\\"}\"; fi'",
             "timeout": 5000
           }
         ]
