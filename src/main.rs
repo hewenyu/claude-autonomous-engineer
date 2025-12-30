@@ -10,7 +10,7 @@ use claude_autonomous::{find_project_root, project::init_project, templates::Age
 /// 纯 Rust 实现的自主工程工具 - 零 Python 依赖
 #[derive(Parser)]
 #[command(name = "claude-autonomous")]
-#[command(author, version, about)]
+#[command(author, version = env!("APP_VERSION"), about)]
 #[command(
     long_about = "A pure Rust implementation of Claude Autonomous Engineering toolkit.\n\
                         All agents and hooks are embedded in the binary - no external dependencies required."
