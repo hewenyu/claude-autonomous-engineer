@@ -1,9 +1,7 @@
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use colored::*;
-use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::collections::HashMap;
 use std::fs;
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
