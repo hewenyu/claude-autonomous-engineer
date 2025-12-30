@@ -82,7 +82,6 @@ fn extract_file_path(input: &Value) -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
     use tempfile::TempDir;
 
     #[test]

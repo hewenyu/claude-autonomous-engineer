@@ -2,7 +2,7 @@
 //!
 //! 从 ROADMAP.md 等文件同步到 memory.json
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use chrono::Utc;
 use std::fs;
 use std::path::Path;

@@ -14,16 +14,18 @@ use super::{
 ///
 /// 这是所有 hook 的统一入口点
 pub fn run_hook(hook_name: &str, project_root: &Path, input: Option<&Value>) -> Result<Value> {
+    let default_input = json!({});
+
     match hook_name {
         "inject_state" => run_inject_state_hook(project_root),
 
         "progress_sync" | "post_write_update" => {
-            let input_data = input.unwrap_or(&json!({}));
+            let input_data = input.unwrap_or(&default_input);
             run_progress_sync_hook(project_root, input_data)
         }
 
         "codex_review_gate" | "pre_write_check" => {
-            let input_data = input.unwrap_or(&json!({}));
+            let input_data = input.unwrap_or(&default_input);
             run_codex_review_gate_hook(project_root, input_data)
         }
 
