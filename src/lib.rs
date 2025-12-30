@@ -19,6 +19,7 @@ pub mod cli;
 pub use anyhow::{Result, Context as AnyhowContext};
 pub use utils::*;
 pub use project::find_project_root;
+pub use state::Memory;
 
 // 版本信息
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
