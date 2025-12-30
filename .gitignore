@@ -1,0 +1,53 @@
+# Rust / Cargo
+# Ignore build artifacts
+/target/
+/target/**
+/target/debug/
+/target/release/
+
+# If you use a workspace, you may want to include workspace target dir
+/target
+
+# Backup files created by rustfmt or editors
+**/*.rs.bk
+
+# Cargo lock - include for apps, ignore for libraries if preferred
+Cargo.lock
+
+# rustc/cargo generated files
+**/*.rlib
+**/*.rmeta
+**/*.dSYM
+
+# Executables and shared libraries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Generated documentation
+/target/doc/
+
+# Build scripts and caches
+.cargo/
+
+# Editor/IDE files
+.idea/
+.vscode/
+*.swp
+*~
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs and temporary files
+*.log
+.coverage
+
+# Misc
+.cache/
+
+# End of file
