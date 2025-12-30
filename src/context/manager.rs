@@ -422,7 +422,7 @@ impl ContextManager {
 
     /// 获取完整上下文（用于 UserPromptSubmit）
     pub fn get_full_context(&self) -> Result<String> {
-        let parts = vec![
+        let parts = [
             self.get_system_header(ContextMode::Autonomous),
             self.get_memory_context()?,
             self.get_roadmap_context(false)?,
@@ -455,7 +455,7 @@ impl ContextManager {
 
     /// 获取代码审查上下文
     pub fn get_review_context(&self, _changed_files: &[String]) -> Result<String> {
-        let parts = vec![
+        let parts = [
             self.get_system_header(ContextMode::Review),
             self.get_memory_context()?,
             self.get_current_task_spec()?,
@@ -484,7 +484,7 @@ impl ContextManager {
 
     /// 获取任务上下文
     pub fn get_task_context(&self, task_id: &str) -> Result<String> {
-        let parts = vec![
+        let parts = [
             self.get_system_header(ContextMode::Task),
             self.get_memory_context()?,
             self.get_current_task_spec()?,
