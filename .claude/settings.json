@@ -1,0 +1,28 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "matcher": "*",
+        "hooks":[
+          {
+            "type": "command",
+            "command": "python3 .claude/hooks/log_user_prompt.py" 
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [],
+    "PostToolUse": [],
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks":[
+        {
+            "type": "command",
+            "command": "python3 .claude/hooks/loop_driver.py"
+          }
+        ]
+      }
+    ]
+  }
+}
