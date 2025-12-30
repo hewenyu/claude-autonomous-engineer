@@ -2,9 +2,9 @@
 //!
 //! 提供项目根目录查找和初始化功能
 
-pub mod root_finder;
 pub mod initializer;
+pub mod root_finder;
 
 // 重导出
-pub use root_finder::find_project_root;
 pub use initializer::*;
+pub use root_finder::find_project_root;

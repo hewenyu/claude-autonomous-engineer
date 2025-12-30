@@ -28,8 +28,7 @@ impl AgentAssets {
             format!("{}.md", name)
         };
 
-        let file = Self::get(&filename)
-            .ok_or_else(|| anyhow!("Agent '{}' not found", name))?;
+        let file = Self::get(&filename).ok_or_else(|| anyhow!("Agent '{}' not found", name))?;
 
         let content = std::str::from_utf8(file.data.as_ref())
             .map_err(|e| anyhow!("Failed to decode agent '{}': {}", name, e))?;

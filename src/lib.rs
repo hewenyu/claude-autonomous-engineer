@@ -7,19 +7,19 @@
 //! - 资源嵌入（Agent 定义和模板）
 
 // 模块声明
-pub mod utils;
-pub mod project;
-pub mod state;
+pub mod cli;
 pub mod context;
 pub mod hooks;
+pub mod project;
+pub mod state;
 pub mod templates;
-pub mod cli;
+pub mod utils;
 
 // 重导出常用类型
-pub use anyhow::{Result, Context as AnyhowContext};
-pub use utils::*;
+pub use anyhow::{Context as AnyhowContext, Result};
 pub use project::find_project_root;
 pub use state::Memory;
+pub use utils::*;
 
 // 版本信息
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

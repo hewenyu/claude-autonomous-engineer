@@ -13,9 +13,7 @@ pub fn git_command(args: &[&str], cwd: Option<&Path>) -> Result<String> {
         cmd.current_dir(dir);
     }
 
-    let output = cmd
-        .output()
-        .context("Failed to execute git command")?;
+    let output = cmd.output().context("Failed to execute git command")?;
 
     if !output.status.success() {
         anyhow::bail!(
@@ -54,12 +52,7 @@ pub fn get_staged_files(cwd: Option<&Path>) -> Result<Vec<String>> {
 /// 获取 git 日志
 pub fn get_git_log(limit: usize, cwd: Option<&Path>) -> Result<String> {
     git_command(
-        &[
-            "log",
-            &format!("-{}", limit),
-            "--oneline",
-            "--name-status",
-        ],
+        &["log", &format!("-{}", limit), "--oneline", "--name-status"],
         cwd,
     )
 }

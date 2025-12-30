@@ -3,11 +3,7 @@ use clap::{Parser, Subcommand};
 use colored::*;
 use std::env;
 
-use claude_autonomous::{
-    find_project_root,
-    project::init_project,
-    templates::AgentAssets,
-};
+use claude_autonomous::{find_project_root, project::init_project, templates::AgentAssets};
 
 /// Claude Autonomous Engineering CLI
 ///
@@ -15,8 +11,10 @@ use claude_autonomous::{
 #[derive(Parser)]
 #[command(name = "claude-autonomous")]
 #[command(author, version, about)]
-#[command(long_about = "A pure Rust implementation of Claude Autonomous Engineering toolkit.\n\
-                        All agents and hooks are embedded in the binary - no external dependencies required.")]
+#[command(
+    long_about = "A pure Rust implementation of Claude Autonomous Engineering toolkit.\n\
+                        All agents and hooks are embedded in the binary - no external dependencies required."
+)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -142,7 +140,11 @@ fn show_status() -> Result<()> {
                 println!();
                 println!("📋 Progress:");
                 println!("   {} Completed: {}", "✓".green(), data.completed.len());
-                println!("   {} In Progress: {}", "▶".yellow(), data.in_progress.len());
+                println!(
+                    "   {} In Progress: {}",
+                    "▶".yellow(),
+                    data.in_progress.len()
+                );
                 println!("   {} Pending: {}", "○".white(), data.pending.len());
                 println!("   {} Blocked: {}", "!".red(), data.blocked.len());
                 println!("   Total: {} ({:.1}%)", data.total, pct);
@@ -166,7 +168,10 @@ fn show_status() -> Result<()> {
     }
 
     println!();
-    println!("💡 Tip: Use {} to see available agents", "claude-autonomous agents".cyan());
+    println!(
+        "💡 Tip: Use {} to see available agents",
+        "claude-autonomous agents".cyan()
+    );
 
     Ok(())
 }
@@ -207,7 +212,10 @@ fn list_agents() -> Result<()> {
 fn doctor() -> Result<()> {
     use std::fs;
 
-    println!("{}", "🔍 Claude Autonomous Engineering Doctor".cyan().bold());
+    println!(
+        "{}",
+        "🔍 Claude Autonomous Engineering Doctor".cyan().bold()
+    );
     println!();
 
     // 检查项目根目录
@@ -219,10 +227,7 @@ fn doctor() -> Result<()> {
         }
         None => {
             println!("{}", "✗".red());
-            println!(
-                "   {}",
-                "No .claude directory found in current path".red()
-            );
+            println!("   {}", "No .claude directory found in current path".red());
             println!("   Run {} to initialize", "claude-autonomous init".cyan());
         }
     }
@@ -241,12 +246,7 @@ fn doctor() -> Result<()> {
             let path = root.join(dir);
             if path.exists() {
                 let count = fs::read_dir(&path)?.count();
-                println!(
-                    "   {} {} ({} items)",
-                    "✓".green(),
-                    desc.yellow(),
-                    count
-                );
+                println!("   {} {} ({} items)", "✓".green(), desc.yellow(), count);
             } else {
                 println!("   {} {} {}", "✗".red(), desc.yellow(), "(missing)".red());
             }
@@ -274,7 +274,12 @@ fn doctor() -> Result<()> {
 
         println!();
         println!("🎯 Hooks:");
-        let hooks = vec!["inject_state", "progress_sync", "codex_review_gate", "loop_driver"];
+        let hooks = vec![
+            "inject_state",
+            "progress_sync",
+            "codex_review_gate",
+            "loop_driver",
+        ];
         for hook in hooks {
             println!("   {} {}", "✓".green(), hook.cyan());
         }

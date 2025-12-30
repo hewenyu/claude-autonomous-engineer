@@ -81,7 +81,8 @@ impl ContextManager {
 ║  ⚠️ TRUST ONLY the state files below, NOT your "memory"                       ║
 ║  ⚠️ CONTINUE the loop - do NOT stop until ROADMAP is complete                 ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
-"#.to_string(),
+"#
+            .to_string(),
             ContextMode::Review => r#"
 ╔══════════════════════════════════════════════════════════════════════════════╗
 ║                    🔍 CODE REVIEW MODE - CONTEXT INJECTION                    ║
@@ -89,7 +90,8 @@ impl ContextManager {
 ║  Review the code changes against the API contract and project standards       ║
 ║  Check for: contract compliance, test coverage, error handling, consistency   ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
-"#.to_string(),
+"#
+            .to_string(),
             ContextMode::Task => r#"
 ╔══════════════════════════════════════════════════════════════════════════════╗
 ║                    📋 TASK EXECUTION MODE - CONTEXT INJECTION                 ║
@@ -97,7 +99,8 @@ impl ContextManager {
 ║  Focus on the current task specification below                                ║
 ║  Follow TDD: write failing test first, then implement, then verify            ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
-"#.to_string(),
+"#
+            .to_string(),
         }
     }
 
@@ -186,11 +189,7 @@ impl ContextManager {
                 memory.progress.tasks_completed,
                 memory.progress.tasks_total,
                 pct,
-                memory
-                    .progress
-                    .current_phase
-                    .as_deref()
-                    .unwrap_or("N/A")
+                memory.progress.current_phase.as_deref().unwrap_or("N/A")
             ));
         }
 
@@ -204,15 +203,14 @@ impl ContextManager {
     /// 获取 ROADMAP 上下文
     pub fn get_roadmap_context(&self, include_completed: bool) -> Result<String> {
         let roadmap_file = self.project_root.join(STATUS_DIR).join("ROADMAP.md");
-        let content = match try_read_file(&roadmap_file) {
-            Some(c) => c,
-            None => {
-                return Ok(
+        let content =
+            match try_read_file(&roadmap_file) {
+                Some(c) => c,
+                None => return Ok(
                     "\n## ❌ ROADMAP NOT FOUND\nInitialize `.claude/status/ROADMAP.md` first!\n"
                         .to_string(),
-                )
-            }
-        };
+                ),
+            };
 
         let data = parse_roadmap(&content)?;
 
@@ -300,7 +298,10 @@ impl ContextManager {
 
     /// 获取错误上下文
     pub fn get_error_context(&self, task_filter: Option<&str>) -> Result<String> {
-        let error_file = self.project_root.join(STATUS_DIR).join("error_history.json");
+        let error_file = self
+            .project_root
+            .join(STATUS_DIR)
+            .join("error_history.json");
 
         let errors: Vec<serde_json::Value> = match read_json(&error_file) {
             Ok(e) => e,

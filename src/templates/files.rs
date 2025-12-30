@@ -28,8 +28,8 @@ impl TemplateAssets {
 
     /// 获取指定模板文件
     fn get_file(filename: &str) -> Result<String> {
-        let file = Self::get(filename)
-            .ok_or_else(|| anyhow!("Template '{}' not found", filename))?;
+        let file =
+            Self::get(filename).ok_or_else(|| anyhow!("Template '{}' not found", filename))?;
 
         let content = std::str::from_utf8(file.data.as_ref())
             .map_err(|e| anyhow!("Failed to decode template '{}': {}", filename, e))?;
@@ -39,9 +39,7 @@ impl TemplateAssets {
 
     /// 列出所有可用的模板文件
     pub fn list_templates() -> Vec<String> {
-        Self::iter()
-            .map(|path| path.as_ref().to_string())
-            .collect()
+        Self::iter().map(|path| path.as_ref().to_string()).collect()
     }
 
     /// 检查模板文件是否存在

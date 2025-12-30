@@ -6,8 +6,7 @@ use std::io::{self, Read};
 use std::path::Path;
 
 use super::{
-    run_codex_review_gate_hook, run_inject_state_hook, run_loop_driver_hook,
-    run_progress_sync_hook,
+    run_codex_review_gate_hook, run_inject_state_hook, run_loop_driver_hook, run_progress_sync_hook,
 };
 
 /// 运行指定的 hook
@@ -61,7 +60,10 @@ pub fn run_hook_from_stdin(hook_name: &str, project_root: &Path) -> Result<Value
 
 /// 打印 hook 输出（格式化为 JSON）
 pub fn print_hook_output(output: &Value) {
-    println!("{}", serde_json::to_string(output).unwrap_or_else(|_| "{}".to_string()));
+    println!(
+        "{}",
+        serde_json::to_string(output).unwrap_or_else(|_| "{}".to_string())
+    );
 }
 
 #[cfg(test)]
@@ -114,4 +116,3 @@ mod tests {
         assert_eq!(result["status"], "ok");
     }
 }
-

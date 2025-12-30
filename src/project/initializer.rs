@@ -22,7 +22,10 @@ pub fn init_project(project_root: &Path, name: Option<&str>, force: bool) -> Res
         ));
     }
 
-    println!("{}", "🚀 Initializing Claude Autonomous project...".cyan().bold());
+    println!(
+        "{}",
+        "🚀 Initializing Claude Autonomous project...".cyan().bold()
+    );
 
     // 1. 创建目录结构
     create_directory_structure(project_root)?;
@@ -36,11 +39,23 @@ pub fn init_project(project_root: &Path, name: Option<&str>, force: bool) -> Res
     // 4. 创建状态文件
     create_state_files(project_root)?;
 
-    println!("{}", "\n✅ Project initialized successfully!".green().bold());
+    println!(
+        "{}",
+        "\n✅ Project initialized successfully!".green().bold()
+    );
     println!("\nNext steps:");
-    println!("  1. Edit {} to add project instructions", ".claude/CLAUDE.md".cyan());
-    println!("  2. Review {} for hook configuration", ".claude/settings.json".cyan());
-    println!("  3. Create {} to define your project roadmap", ".claude/status/ROADMAP.md".cyan());
+    println!(
+        "  1. Edit {} to add project instructions",
+        ".claude/CLAUDE.md".cyan()
+    );
+    println!(
+        "  2. Review {} for hook configuration",
+        ".claude/settings.json".cyan()
+    );
+    println!(
+        "  3. Create {} to define your project roadmap",
+        ".claude/status/ROADMAP.md".cyan()
+    );
 
     Ok(())
 }
@@ -210,7 +225,10 @@ mod tests {
         assert!(temp.path().join(".claude/settings.json").exists());
         assert!(temp.path().join(".claude/status/memory.json").exists());
         assert!(temp.path().join(".claude/status/ROADMAP.md").exists());
-        assert!(temp.path().join(".claude/status/api_contract.yaml").exists());
+        assert!(temp
+            .path()
+            .join(".claude/status/api_contract.yaml")
+            .exists());
 
         // 验证 agent 文件
         let agents_dir = temp.path().join(".claude/agents");
@@ -243,4 +261,3 @@ mod tests {
         assert!(result.is_ok());
     }
 }
-

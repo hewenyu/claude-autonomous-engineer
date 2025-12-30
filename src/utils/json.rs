@@ -28,11 +28,9 @@ where
             .with_context(|| format!("Failed to create directory: {}", parent.display()))?;
     }
 
-    let json = serde_json::to_string_pretty(data)
-        .context("Failed to serialize to JSON")?;
+    let json = serde_json::to_string_pretty(data).context("Failed to serialize to JSON")?;
 
-    fs::write(path, json)
-        .with_context(|| format!("Failed to write JSON file: {}", path.display()))
+    fs::write(path, json).with_context(|| format!("Failed to write JSON file: {}", path.display()))
 }
 
 /// 读取 JSON 文件，失败时返回默认值

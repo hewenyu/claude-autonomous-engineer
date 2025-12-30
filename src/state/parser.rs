@@ -317,4 +317,3 @@ mod tests {
         assert_eq!(phase.status, "In");
     }
 }
-

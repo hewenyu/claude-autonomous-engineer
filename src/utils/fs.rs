@@ -6,8 +6,7 @@ use std::path::Path;
 
 /// 安全读取文件内容
 pub fn read_file(path: &Path) -> Result<String> {
-    fs::read_to_string(path)
-        .with_context(|| format!("Failed to read file: {}", path.display()))
+    fs::read_to_string(path).with_context(|| format!("Failed to read file: {}", path.display()))
 }
 
 /// 尝试读取文件，失败时返回 None
@@ -23,8 +22,7 @@ pub fn write_file(path: &Path, content: &str) -> Result<()> {
             .with_context(|| format!("Failed to create directory: {}", parent.display()))?;
     }
 
-    fs::write(path, content)
-        .with_context(|| format!("Failed to write file: {}", path.display()))
+    fs::write(path, content).with_context(|| format!("Failed to write file: {}", path.display()))
 }
 
 /// 追加内容到文件

@@ -197,7 +197,11 @@ fn check_stuck(project_root: &Path) -> Result<StuckStatus> {
         if task_errors.len() >= 3 {
             return Ok(StuckStatus {
                 stuck: true,
-                reason: format!("Task {} has {} unresolved errors", task_id, task_errors.len()),
+                reason: format!(
+                    "Task {} has {} unresolved errors",
+                    task_id,
+                    task_errors.len()
+                ),
                 suggestion: "Review error patterns, try alternative".to_string(),
             });
         }
@@ -238,7 +242,10 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let result = run_loop_driver_hook(temp.path()).unwrap();
         assert_eq!(result["decision"], "block");
-        assert!(result["reason"].as_str().unwrap().contains("ROADMAP NOT FOUND"));
+        assert!(result["reason"]
+            .as_str()
+            .unwrap()
+            .contains("ROADMAP NOT FOUND"));
     }
 
     #[test]
@@ -278,11 +285,7 @@ mod tests {
 
         // 创建 memory.json
         let memory = Memory::default();
-        write_json(
-            &temp.path().join(".claude/status/memory.json"),
-            &memory,
-        )
-        .unwrap();
+        write_json(&temp.path().join(".claude/status/memory.json"), &memory).unwrap();
 
         let result = run_loop_driver_hook(temp.path()).unwrap();
         assert_eq!(result["decision"], "block");

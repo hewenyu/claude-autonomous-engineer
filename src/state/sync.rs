@@ -55,7 +55,11 @@ pub fn sync_from_roadmap(project_root: &Path, roadmap_path: &Path) -> Result<boo
             // 检查是否是新任务
             if memory.current_task.id.as_ref() != Some(task_id) {
                 // 任务变更，更新 current_task
-                let status = if roadmap_data.in_progress.iter().any(|t| t.id.as_ref() == Some(task_id)) {
+                let status = if roadmap_data
+                    .in_progress
+                    .iter()
+                    .any(|t| t.id.as_ref() == Some(task_id))
+                {
                     "IN_PROGRESS"
                 } else {
                     "PENDING"
@@ -80,7 +84,10 @@ pub fn sync_from_roadmap(project_root: &Path, roadmap_path: &Path) -> Result<boo
                 };
                 memory.current_task.retry_count = 0;
 
-                log_decision(project_root, &format!("SYNC: Current task updated to {}", task_id))?;
+                log_decision(
+                    project_root,
+                    &format!("SYNC: Current task updated to {}", task_id),
+                )?;
             }
         }
     }
@@ -109,10 +116,7 @@ pub fn sync_from_roadmap(project_root: &Path, roadmap_path: &Path) -> Result<boo
 /// 从任务文件同步状态
 pub fn sync_from_task_file(project_root: &Path, task_path: &Path) -> Result<bool> {
     // 从文件名提取任务 ID
-    let filename = task_path
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("");
+    let filename = task_path.file_name().and_then(|n| n.to_str()).unwrap_or("");
 
     let task_id_pattern = regex::Regex::new(r"(TASK-\d+)").unwrap();
     let task_id = match task_id_pattern.captures(filename) {
@@ -148,7 +152,10 @@ pub fn sync_from_task_file(project_root: &Path, task_path: &Path) -> Result<bool
 
         // 检查验收标准完成情况
         let criteria = &task_data.acceptance_criteria;
-        let completed = criteria.iter().filter(|c| c.to_lowercase().contains("[x]")).count();
+        let completed = criteria
+            .iter()
+            .filter(|c| c.to_lowercase().contains("[x]"))
+            .count();
         let total = criteria.len();
 
         if total > 0 {
@@ -164,7 +171,10 @@ pub fn sync_from_task_file(project_root: &Path, task_path: &Path) -> Result<bool
 
         // 写回 memory.json
         write_json(&memory_path, &memory)?;
-        log_decision(project_root, &format!("SYNC: Updated task {} from task file", task_id))?;
+        log_decision(
+            project_root,
+            &format!("SYNC: Updated task {} from task file", task_id),
+        )?;
         Ok(true)
     } else {
         Ok(false)
@@ -264,4 +274,3 @@ mod tests {
         );
     }
 }
-

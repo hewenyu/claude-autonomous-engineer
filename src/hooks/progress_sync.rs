@@ -26,10 +26,7 @@ pub fn run_progress_sync_hook(project_root: &Path, input: &Value) -> Result<Valu
     };
 
     // 规范化路径
-    let filename = file_path
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("");
+    let filename = file_path.file_name().and_then(|n| n.to_str()).unwrap_or("");
 
     let mut synced = false;
     let mut sync_type = None;
