@@ -36,9 +36,10 @@ pub enum ContextMode {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// 缓存数据
+// 缓存数据（预留用于未来优化）
 // ═══════════════════════════════════════════════════════════════════
 
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 struct CachedData {
     content: String,
@@ -54,6 +55,7 @@ struct CachedData {
 /// 负责从各种状态文件中读取信息并组装成不同模式的上下文
 pub struct ContextManager {
     pub project_root: PathBuf,
+    #[allow(dead_code)]
     cache: Arc<Mutex<HashMap<String, CachedData>>>,
 }
 
