@@ -1,0 +1,21 @@
+[package]
+name = "claude-autonomous"
+version = "1.0.0"
+edition = "2021"
+description = "Claude Autonomous Engineering CLI - Hook runner and project initializer"
+authors = ["Your Name"]
+license = "MIT"
+
+[dependencies]
+clap = { version = "4.4", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9"
+anyhow = "1.0"
+colored = "2.0"
+dirs = "5.0"
+
+[profile.release]
+opt-level = "z"
+lto = true
+strip = true
