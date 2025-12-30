@@ -1,4 +1,4 @@
-name: Auto Release on VERSION Change
+name: Auto Tag on VERSION Change
 
 on:
   push:
@@ -8,12 +8,9 @@ on:
     paths:
       - 'VERSION'
 
-env:
-  CARGO_TERM_COLOR: always
-
 jobs:
-  check-and-release:
-    name: Check VERSION and Create Release
+  create-tag:
+    name: Create Git Tag from VERSION
     runs-on: ubuntu-latest
 
     steps:
@@ -41,26 +38,6 @@ jobs:
             echo "✅ Tag v${{ steps.version.outputs.VERSION }} does not exist, will create"
           fi
 
-      - name: Setup Rust
-        if: steps.check_tag.outputs.exists == 'false'
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Run tests
-        if: steps.check_tag.outputs.exists == 'false'
-        run: cargo test --all --release
-
-      - name: Build release binary
-        if: steps.check_tag.outputs.exists == 'false'
-        run: cargo build --release
-
-      - name: Install cargo-deb
-        if: steps.check_tag.outputs.exists == 'false'
-        run: cargo install cargo-deb
-
-      - name: Build DEB package
-        if: steps.check_tag.outputs.exists == 'false'
-        run: cargo deb
-
       - name: Create and push tag
         if: steps.check_tag.outputs.exists == 'false'
         run: |
@@ -68,55 +45,14 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git tag -a "${{ steps.version.outputs.VERSION_TAG }}" -m "Release ${{ steps.version.outputs.VERSION_TAG }}"
           git push origin "${{ steps.version.outputs.VERSION_TAG }}"
-
-      - name: Create Release and Upload Assets
-        if: steps.check_tag.outputs.exists == 'false'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.version.outputs.VERSION_TAG }}
-          name: Release ${{ steps.version.outputs.VERSION_TAG }}
-          draft: false
-          prerelease: false
-          body: |
-            ## Claude Autonomous Engineering ${{ steps.version.outputs.VERSION_TAG }}
-
-            ### Features
-            - ⚡ Zero Python dependencies - Pure Rust implementation
-            - 📦 5 embedded agents and all templates
-            - 🪝 4 built-in hooks (inject_state, progress_sync, codex_review_gate, loop_driver)
-            - 🚀 Fast startup (< 50ms)
-            - 📊 Rich CLI with colored output
-
-            ### Installation
-
-            **Debian/Ubuntu:**
-            ```bash
-            wget https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.VERSION_TAG }}/claude-autonomous_${{ steps.version.outputs.VERSION }}_amd64.deb
-            sudo dpkg -i claude-autonomous_${{ steps.version.outputs.VERSION }}_amd64.deb
-            ```
-
-            **From binary:**
-            ```bash
-            wget https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.VERSION_TAG }}/claude-autonomous
-            chmod +x claude-autonomous
-            sudo mv claude-autonomous /usr/local/bin/
-            ```
-
-            **From source:**
-            ```bash
-            cargo install claude-autonomous
-            ```
-
-            ### What's Changed
-            - Auto-released by VERSION file update to ${{ steps.version.outputs.VERSION }}
-          files: |
-            ./target/debian/claude-autonomous_${{ steps.version.outputs.VERSION }}_amd64.deb
-            ./target/release/claude-autonomous
+          echo "✅ Tag ${{ steps.version.outputs.VERSION_TAG }} created and pushed"
+          echo "🚀 This will trigger the release workflow to build and publish"
 
       - name: Skip - Tag already exists
         if: steps.check_tag.outputs.exists == 'true'
         run: |
-          echo "ℹ️  Tag v${{ steps.version.outputs.VERSION }} already exists, skipping release"
+          echo "ℹ️  Tag v${{ steps.version.outputs.VERSION }} already exists, skipping"
+          echo ""
           echo "If you want to re-release, delete the existing tag first:"
           echo "  git tag -d v${{ steps.version.outputs.VERSION }}"
           echo "  git push origin :refs/tags/v${{ steps.version.outputs.VERSION }}"
