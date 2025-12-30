@@ -228,6 +228,7 @@ pub fn sync_from_phase_plan(project_root: &Path, phase_path: &Path) -> Result<bo
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
     use tempfile::TempDir;
 
     #[test]
