@@ -1,6 +1,9 @@
-//! 嵌入资源模块
+//! 嵌入资源管理
 //!
-//! 使用 rust-embed 嵌入 Agent 定义和模板文件（将在阶段 5 实现）
+//! 使用 rust-embed 将 agent 定义和模板文件编译进二进制
 
-/// 临时占位符
-pub fn placeholder() {}
+pub mod agents;
+pub mod files;
+
+pub use agents::AgentAssets;
+pub use files::TemplateAssets;
