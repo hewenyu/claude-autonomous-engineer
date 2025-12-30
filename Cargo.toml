@@ -5,7 +5,7 @@ edition = "2021"
 description = "Claude Autonomous Engineering CLI - Complete Rust implementation"
 authors = ["Your Name <email@example.com>"]
 license = "MIT"
-repository = "https://github.com/yourusername/claude-autonomous-engineer"
+repository = "https://github.com/hewenyu/claude-autonomous-engineer"
 readme = "README.md"
 keywords = ["claude", "autonomous", "engineering", "cli", "hooks"]
 categories = ["command-line-utilities", "development-tools"]
@@ -53,3 +53,50 @@ panic = "abort"        # 减小二进制大小
 tempfile = "3.10"      # 测试用临时文件
 assert_cmd = "2.0"     # CLI 测试
 predicates = "3.1"     # 测试断言
+
+# ═══════════════════════════════════════════════════════════════════
+# DEB 包配置（cargo-deb）
+# ═══════════════════════════════════════════════════════════════════
+
+[package.metadata.deb]
+maintainer = "Claude Autonomous Team <noreply@anthropic.com>"
+copyright = "2025, Claude Autonomous Team"
+license-file = ["LICENSE", "0"]
+extended-description = """\
+Claude Autonomous Engineering CLI - A pure Rust implementation of autonomous \
+engineering toolkit with zero Python dependencies.
+
+Features:
+- 4 embedded hooks (inject_state, progress_sync, codex_review_gate, loop_driver)
+- 5 pre-installed agents (project-architect, codex-reviewer, code-executor, etc.)
+- Smart context management (80K/40K/30K token budgets)
+- Automatic state synchronization from ROADMAP.md to memory.json
+- Zero external dependencies - all resources embedded in binary
+
+Perfect for Claude Code autonomous engineering workflows."""
+
+depends = "$auto"
+section = "devel"
+priority = "optional"
+assets = [
+    ["target/release/claude-autonomous", "usr/bin/", "755"],
+    ["README.md", "usr/share/doc/claude-autonomous/", "644"],
+    ["LICENSE", "usr/share/doc/claude-autonomous/", "644"],
+]
+
+# ═══════════════════════════════════════════════════════════════════
+# RPM 包配置（cargo-rpm）
+# ═══════════════════════════════════════════════════════════════════
+
+[package.metadata.rpm]
+package = "claude-autonomous"
+
+[package.metadata.rpm.cargo]
+buildflags = ["--release"]
+
+[package.metadata.rpm.targets]
+claude-autonomous = { path = "/usr/bin/claude-autonomous" }
+
+[package.metadata.rpm.files]
+"../README.md" = { path = "/usr/share/doc/claude-autonomous/README.md" }
+"../LICENSE" = { path = "/usr/share/doc/claude-autonomous/LICENSE" }
