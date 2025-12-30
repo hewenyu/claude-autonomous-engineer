@@ -59,8 +59,8 @@ predicates = "3.1"     # 测试断言
 # ═══════════════════════════════════════════════════════════════════
 
 [package.metadata.deb]
-maintainer = "Claude Autonomous Team <noreply@anthropic.com>"
-copyright = "2025, Claude Autonomous Team"
+maintainer = "hewenyu <yuebanlaosiji@outlook.com>"
+copyright = "2025, hewenyu"
 license-file = ["LICENSE", "0"]
 extended-description = """\
 Claude Autonomous Engineering CLI - A pure Rust implementation of autonomous \
