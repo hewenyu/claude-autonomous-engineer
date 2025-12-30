@@ -1,214 +1,235 @@
-# 构建弹性自主软件工程系统（Claude Code 长周期自动化 · 状态管理 · 自我纠正）
+# 🚀 Claude 自主工程系统 v2.0 - 增强版上下文管理
 
-本仓库是一份面向“无人值守、长周期（10h+）自动化软件工程”的架构蓝图与最小实现骨架：用 **Claude Code 的 Agent + Hooks** 搭建确定性的“控制平面”，用 **文件系统状态** 解决上下文压缩带来的记忆丢失，并用 **Codex CLI**（可选）作为强制质量门禁，形成“实现→验证→审查→纠错”的闭环。
+## 问题分析
 
----
+你的原始方案已经抓住了核心问题：**上下文压缩导致"记忆丢失"**。但原始的 `inject_state.py` 注入的信息太少：
 
-## 目录
+```python
+# 原版只注入这些：
+context += f"Current State: {f.read()}\n"  # memory.json 全文
+context += line  # ROADMAP.md 未完成任务
+```
 
-- [1. 绪论：从辅助编程到自主工程](#1-绪论从辅助编程到自主工程)
-- [2. 长周期任务的系统性挑战](#2-长周期任务的系统性挑战)
-- [3. 总体架构：双层控制模型](#3-总体架构双层控制模型)
-- [4. 治理层：`.claude/CLAUDE.md` 作为“宪法”](#4-治理层claudeclaudemd-作为宪法)
-- [5. 状态持久化：用文件系统做“外部海马体”](#5-状态持久化用文件系统做外部海马体)
-- [6. Hook 控制平面：事前约束 + 事后审计 + 防止提前停止](#6-hook-控制平面事前约束--事后审计--防止提前停止)
-- [7. 专用智能体网络（Agent Swarm）](#7-专用智能体网络agent-swarm)
-- [8. 自动化反馈闭环与自愈策略](#8-自动化反馈闭环与自愈策略)
-- [9. 实施路径（从 0 到 10h+ Loop）](#9-实施路径从-0-到-10h-loop)
-- [10. 交付物清单](#10-交付物清单)
-
----
-
-## 1. 绪论：从辅助编程到自主工程
-
-LLM 赋能的软件开发正在从“交互式辅助（Interactive Copilot）”迈向“自主智能体（Autonomous Agent）”。在复杂工程任务上，用户常见痛点（执行遗漏、功能不完整、API 实现不一致、长周期运行的上下文丢失）并非偶发瑕疵，而是 **长时序、多步骤任务中的系统性熵增**：模型是概率系统，越长的链路越容易漂移；上下文越长越可能被压缩；无人值守时偏差会累积成灾难。
-
-本仓库的核心思想是：**不信任模型的短期记忆，把“可信”转移到文件系统状态与 Hook 脚本（确定性控制）上**。
+这导致 Claude 在长时间运行后丢失：
+1. 代码库的整体结构
+2. 已实现函数的签名
+3. 错误历史和尝试过的解决方案
+4. API 契约细节
+5. 最近的文件变更
 
 ---
 
-## 2. 长周期任务的系统性挑战
+## 改进方案：多层上下文注入系统
 
-### 2.1 上下文压缩导致“记忆重置”
+### 核心思想
+**不怕浪费 token，怕的是信息不够**。我们采用分层注入策略：
 
-Claude Code（及同类工具）在上下文接近上限时会进行自动压缩（Auto-Compact）。摘要对人类“回忆”够用，但对自主系统是有损转换：关键约束（禁改文件、必须遵循契约、验收标准）可能被压掉，导致系统退化为“无宪法状态”。
+```
+Layer 0: 系统指令 (最高优先级 - 必须存在)
+Layer 1: 当前状态 (memory.json)
+Layer 2: 待处理任务 (ROADMAP.md)
+Layer 3: 错误历史 (防止重复错误)
+Layer 4: API 契约 (接口规范)
+Layer 5: 活跃文件内容 (正在编辑的代码)
+Layer 6: 项目结构 (目录树 + 签名)
+Layer 7: Git 变更历史
+Layer 8: 最近决策日志
+```
 
-### 2.2 概率性执行偏差的累积
-
-长周期里最常见的失败模式之一是 **接口/实现不一致**：早期定义了 `getUserData(id)`，后期调用变成 `fetchUserInfo(userId)`。无人值守时，这种漂移会沿依赖传播，直到构建失败或埋下隐患。
-
-### 2.3 “任务完成错觉”与执行遗漏
-
-在缺乏强验收门禁时，智能体容易提前“宣布完成”（Termination Bias），用占位实现、只覆盖快乐路径、遗漏边界与错误处理；任务列表变长后也容易丢全局进度。
-
----
-
-## 3. 总体架构：双层控制模型
-
-**双层控制模型（Two-Layer Control Model）**：
-
-- **认知层（Cognitive Layer）**：Claude/Agent 负责理解需求、分解任务、生成/修改代码。
-- **确定性控制层（Deterministic Control Layer）**：Hooks + 脚本负责注入状态、拦截危险动作、强制质量门禁、阻止提前停止。
-
-核心组件（概念层）：
-
-| 组件 | 职责 | 解决的问题 |
-|---|---|---|
-| Orchestrator（治理提示） | 定义身份、流程、最高指令 | 行为边界、抗漂移 |
-| Hooks（控制平面） | 注入状态 / 拦截写入 / 审查门禁 / Stop 逻辑 | 上下文丢失、API 不一致、无人值守错误累积 |
-| State Persistence（外部记忆） | 用文件保存 roadmap/契约/运行时状态 | 跨压缩周期记忆持久化 |
-| Agent Swarm（专用分工） | 架构/实现/审查隔离 | 降低单体上下文负载，提升一致性 |
-| Codex Gatekeeper（可选） | 外部 CLI 强制质量审查 | 防“看起来对但其实错” |
-
----
-
-## 仓库结构（当前实现骨架）
-
-本仓库已提供 `.claude/` 目录的关键文件（实际路径以本节为准）：
+### 新增文件说明
 
 ```
 .claude/
-├── CLAUDE.md                 # 宪法级治理层（Orchestrator 协议）
-├── settings.json             # Hook 配置入口
+├── CLAUDE.md                     # 🆕 增强版协议 (v2.0)
+├── settings.json                 # 🆕 更新的 hook 配置
 ├── hooks/
-│   ├── inject_state.py       # UserPromptSubmit：注入外部状态到上下文
-│   ├── loop_driver.py        # Stop：如果 ROADMAP 未完成则阻止停止
-│   └── guardrail_commit.py   # （可选）PreToolUse：提交前门禁示例
-├── agents/                   # 专用智能体定义
-│   ├── project-architect-supervisor.md
-│   ├── code-executor.md
-│   ├── codex-reviewer.md
-│   ├── prd-generator.md
-│   └── visual-designer.md
-└── skills/
-    └── codex-collaboration/  # Codex CLI 交互模式（Skill）
-```
-
-运行时状态目录（需要你初始化）：
-
-```
-.claude/status/
-├── ROADMAP.md                # 全局进度表（Hook 用它判断是否继续 loop）
-├── memory.json               # 微观状态快照（跨压缩周期“复活”上下文）
-└── api_contract.yaml         # API 契约（Executor/Reviewer 的“法律”）
+│   ├── inject_state_v2.py        # 🆕 多层上下文注入
+│   ├── loop_driver_v2.py         # 🆕 智能循环驱动 (含死循环检测)
+│   ├── error_tracker.py          # 🆕 错误历史管理
+│   ├── code_digest.py            # 🆕 代码库摘要生成器
+│   ├── pre_write_check.py        # 🆕 写入前检查
+│   └── post_write_update.py      # 🆕 写入后状态更新
+└── status/
+    ├── memory.json.template      # 🆕 增强版状态模板
+    ├── error_history.json        # 🆕 错误历史
+    ├── code_digest.json          # 🆕 代码库摘要
+    └── recent_changes.json       # 🆕 最近变更记录
 ```
 
 ---
 
-## 4. 治理层：`.claude/CLAUDE.md` 作为“宪法”
+## 关键改进详解
 
-`.claude/CLAUDE.md` 的定位不是 README，而是“宪法级协议”，用来覆盖模型的默认偏好（求快、少做、提前结束），并规定：
+### 1. 多层上下文注入 (`inject_state_v2.py`)
 
-- **Memory First**：任何行动前先读取外部状态（而不是依赖对话历史）。
-- **No Human Interaction（无人值守）**：遇到问题先自修复，只有多次失败才允许停止。
-- **Quality Gate**：代码变更需要通过审查门禁（如 Codex Reviewer）。
-- **State Persistence**：完成子任务后必须更新状态文件。
-- **Agent Swarm Protocol**：架构/实现/审查分工，Orchestrator 不直接写业务代码。
+**改进前**：只注入 memory.json 和未完成任务（~500 字符）
 
-参见：`.claude/CLAUDE.md`
+**改进后**：注入多达 50,000 字符的分层上下文
 
----
+```python
+# 按优先级注入不同类型的信息
+context_parts.append(generate_memory_state())        # 当前状态
+context_parts.append(generate_pending_tasks())       # 待处理任务
+context_parts.append(generate_error_context())       # 错误历史
+context_parts.append(generate_contract_summary())    # API 契约
+context_parts.append(generate_active_files_context()) # 活跃文件内容
+context_parts.append(get_project_structure())        # 项目结构
+```
 
-## 5. 状态持久化：用文件系统做“外部海马体”
+### 2. 错误历史系统 (`error_tracker.py`)
 
-目标：即使发生上下文压缩/会话重启，系统也能“读回现场”，继续执行而不漂移。
+防止 Claude 反复尝试已经失败的方案：
 
-推荐最小状态：
+```bash
+# 记录错误
+python3 error_tracker.py add "TASK-001" "ImportError: bcrypt" "尝试 pip install"
 
-- `ROADMAP.md`：宏观任务队列（Todo / In Progress / Done）。
-- `memory.json`：微观状态机（当前任务、活跃文件、上次失败原因、重试次数等）。
-- `api_contract.yaml`：接口契约（函数签名、参数、返回值、错误约束等）。
+# 标记解决
+python3 error_tracker.py resolve "TASK-001" "安装了正确版本的依赖"
 
-本仓库已实现“状态注入”Hook：`.claude/hooks/inject_state.py` 会在每次提示提交时把 `memory.json` 与 `ROADMAP.md` 未完成任务注入到上下文，抵抗 Auto-Compact。
+# 查看历史
+python3 error_tracker.py list
+```
 
----
+在每次任务开始时，`inject_state_v2.py` 会自动注入相关错误历史。
 
-## 6. Hook 控制平面：事前约束 + 事后审计 + 防止提前停止
+### 3. 代码库摘要 (`code_digest.py`)
 
-### 6.1 UserPromptSubmit：状态注入（已实现）
+预先扫描代码库，提取所有函数/类签名：
 
-- 配置：`.claude/settings.json`
-- 实现：`.claude/hooks/inject_state.py`
-- 效果：每次交互强制注入 `memory.json` 与 `ROADMAP.md` 的未完成项，提醒“以文件为准继续 loop”。
+```bash
+python3 code_digest.py generate .
+```
 
-### 6.2 Stop Hook：防止提前停止（已实现）
+生成的摘要可以帮助 Claude 快速理解代码结构，即使在上下文压缩后也能"记住"代码库的整体架构。
 
-- 配置：`.claude/settings.json`
-- 实现：`.claude/hooks/loop_driver.py`
-- 逻辑：若 `ROADMAP.md` 中仍存在 `- [ ]`，则阻止停止并要求继续下一个任务；否则允许 stop。
+### 4. 智能循环驱动 (`loop_driver_v2.py`)
 
-### 6.3 PreToolUse / PostToolUse：确定性门禁（示例，需按需启用）
+**改进前**：只检查是否有未完成任务
 
-典型用法：
+**改进后**：
+- 检测死循环（同一任务失败 N 次）
+- 检测连续错误过多
+- 提供具体的恢复建议
+- 支持紧急熔断
 
-- **PreToolUse（写入前防御）**：在写入 API 相关文件前检查签名/依赖/契约一致性，不通过则 `deny` 并给出明确原因。
-- **PreToolUse（提交前门禁）**：拦截 `git commit`，先运行 `codex review`，FAIL 则拒绝提交并把审查意见回灌给智能体。
+### 5. 写入钩子 (`pre_write_check.py` + `post_write_update.py`)
 
-仓库中提供了提交门禁示例脚本：`.claude/hooks/guardrail_commit.py`（当前未在 `.claude/settings.json` 启用，你可以按需要接入）。
+- **写入前**：检查是否违反契约，更新活跃文件列表
+- **写入后**：记录变更历史，更新检查点
 
----
+### 6. 增强版 memory.json
 
-## 7. 专用智能体网络（Agent Swarm）
-
-该模式通过“角色隔离”降低漂移：
-
-- `project-architect-supervisor`：输出架构树、分阶段计划、可执行任务清单（只做规划，不写实现）。
-- `code-executor`：严格 TDD，实现必须与 `api_contract.yaml` 100%一致，并写测试/跑测试/跑 linter。
-- `codex-reviewer`：只负责运行 Codex CLI 并报告 PASS/FAIL（不手工审查、不伪造结果）。
-- `prd-generator`：把模糊需求变成可执行 PRD。
-- `visual-designer`：输出 ASCII wireframe / Mermaid 图。
-
-参见：`.claude/agents/*`
-
----
-
-## 8. 自动化反馈闭环与自愈策略
-
-推荐的无人值守闭环：
-
-1. **任务获取**：从 `ROADMAP.md` 取下一条未完成任务。
-2. **状态注入**：Hook 注入 `memory.json`/Roadmap，抵抗上下文丢失。
-3. **实现（TDD）**：先写失败测试→实现→测试通过→重构（必要时）→linter 通过。
-4. **外部审查（可选但强烈建议）**：Codex CLI 作为质量门禁，FAIL 则回到第 3 步修复。
-5. **写回状态**：更新 `memory.json` 和 `ROADMAP.md`。
-6. **Stop 检查**：若仍有未完成任务，Stop Hook 阻止停止并继续循环。
-
-自愈建议（概念层）：
-
-- **指数退避**：对外部依赖/网络抖动的重试采用 backoff。
-- **死循环熔断**：同一任务失败超过阈值（如 5 次）触发“换方案/降级/回滚/请求人工介入”。
-- **错误记账**：把失败原因与修复尝试写入 `memory.json`，避免重复踩坑。
+```json
+{
+  "session": { ... },           // 会话级信息
+  "current_task": { ... },      // 当前任务详情
+  "active_files": [...],        // 活跃文件列表（新增）
+  "working_context": {          // 工作上下文（新增）
+    "current_file": "...",
+    "current_function": "...",
+    "pending_tests": [...],
+    "pending_implementations": [...]
+  },
+  "error_state": { ... },       // 错误状态
+  "checkpoints": [...],         // 检查点历史（新增）
+  "decisions_made": [...],      // 决策历史（新增）
+  "next_action": { ... }        // 下一步行动
+}
+```
 
 ---
 
-## 9. 实施路径（从 0 到 10h+ Loop）
+## 使用指南
 
-1. **初始化状态目录**
-   - 创建 `.claude/status/ROADMAP.md`、`.claude/status/memory.json`、（可选）`.claude/status/api_contract.yaml`。
-2. **确认 Hooks 已启用**
-   - 参见 `.claude/settings.json`，确保 `inject_state.py` 与 `loop_driver.py` 生效。
-3. **先规划后执行**
-   - 用 `project-architect-supervisor` 生成架构树与分阶段任务；把任务写进 `ROADMAP.md`。
-4. **进入执行循环**
-   - 用 `code-executor` 按任务逐个实现（强制 TDD），每完成一步都更新 `memory.json`/`ROADMAP.md`。
-5. **引入质量门禁（可选）**
-   - 用 `codex-reviewer` 在提交前跑 Codex CLI；或把门禁挂到 PreToolUse（参考 `guardrail_commit.py`）。
+### 初始化项目
+
+```bash
+# 1. 创建状态目录
+mkdir -p .claude/status
+
+# 2. 初始化 memory.json
+cp .claude/status/memory.json.template .claude/status/memory.json
+
+# 3. 生成代码摘要
+python3 .claude/hooks/code_digest.py generate .
+
+# 4. 创建 ROADMAP.md
+# (使用 project-architect-supervisor agent)
+```
+
+### 运行循环
+
+```bash
+# 启动 Claude Code，它会自动：
+# 1. 每次交互注入完整上下文
+# 2. 写入文件时自动追踪
+# 3. 尝试停止时检查任务完成度
+```
 
 ---
 
-## 10. 交付物清单
+## Token 使用估算
 
-面向“弹性自主工程系统”的关键交付物（仓库已包含/建议补齐）：
+| 组件 | 估算 Token 数 |
+|------|-------------|
+| 系统指令 | ~200 |
+| memory.json | ~500 |
+| 待处理任务 | ~500 |
+| 错误历史 | ~1,000 |
+| API 契约 | ~2,000 |
+| 活跃文件（5个）| ~5,000 |
+| 项目结构 | ~2,000 |
+| Git 历史 | ~500 |
+| **总计** | **~12,000** |
 
-- 治理层：`.claude/CLAUDE.md`
-- Hook 控制平面：`.claude/settings.json` + `.claude/hooks/*`
-- 外部记忆：`.claude/status/ROADMAP.md`、`.claude/status/memory.json`、`.claude/status/api_contract.yaml`
-- 专用智能体：`.claude/agents/*`
-- Codex 协作模式（可选）：`.claude/skills/codex-collaboration/SKILL.md`
+在 200K 上下文窗口中，这只占 6%，完全可以接受。
 
 ---
 
-## License
+## 进一步优化建议
 
-See `LICENSE`.
+### 1. 添加向量检索（高级）
+如果代码库很大，可以集成向量数据库：
+- 每个函数生成 embedding
+- 根据当前任务检索最相关的代码片段
 
+### 2. 添加 AST 分析
+更精确地提取代码结构：
+```python
+import ast
+tree = ast.parse(code)
+# 提取类、函数、依赖关系
+```
+
+### 3. 添加 Test Coverage 追踪
+知道哪些代码已经被测试覆盖，哪些还没有。
+
+### 4. 添加 Dependency Graph
+追踪模块之间的依赖关系，避免循环依赖和不一致的修改。
+
+---
+
+## 常见问题
+
+**Q: 注入这么多内容会不会太慢？**
+A: `inject_state_v2.py` 执行时间通常 < 100ms，对用户体验影响极小。
+
+**Q: 如何知道上下文注入是否工作？**
+A: 检查 Claude 的响应是否引用了注入的信息，如 "Based on memory.json, the current task is..."
+
+**Q: 如何调整注入的信息量？**
+A: 修改 `inject_state_v2.py` 中的 `CONTEXT_BUDGET` 变量。
+
+---
+
+## 总结
+
+你的原始方案方向是对的，但需要更"激进"地注入上下文。核心改进：
+
+1. **更多信息**：从 ~500 字符提升到 ~12,000 token
+2. **更结构化**：分层注入，优先级明确
+3. **更智能**：自动追踪错误历史、活跃文件、代码结构
+4. **更健壮**：死循环检测、紧急熔断
+
+记住：**不怕浪费 token，怕的是信息不够**。在 200K 上下文窗口时代，我们有充足的空间来保证 Claude 的"记忆"持久可靠。

@@ -3,23 +3,43 @@
     "UserPromptSubmit": [
       {
         "matcher": "*",
-        "hooks":[
+        "hooks": [
           {
             "type": "command",
-            "command": "python3 .claude/hooks/inject_state.py" 
+            "command": "python3 .claude/hooks/inject_state_v2.py"
           }
         ]
       }
     ],
-    "PreToolUse": [],
-    "PostToolUse": [],
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|Create",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 .claude/hooks/pre_write_check.py"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|Create",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 .claude/hooks/post_write_update.py"
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "matcher": "*",
-        "hooks":[
-        {
+        "hooks": [
+          {
             "type": "command",
-            "command": "python3 .claude/hooks/loop_driver.py"
+            "command": "python3 .claude/hooks/loop_driver_v2.py"
           }
         ]
       }
