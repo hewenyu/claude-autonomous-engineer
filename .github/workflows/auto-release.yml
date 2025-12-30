@@ -8,6 +8,9 @@ on:
     paths:
       - 'VERSION'
 
+permissions:
+  contents: write  # 允许创建和推送 tag
+
 jobs:
   create-tag:
     name: Create Git Tag from VERSION
@@ -18,6 +21,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0  # 获取完整历史，用于检查 tag
+          token: ${{ secrets.GITHUB_TOKEN }}  # 使用 GitHub Token 进行认证
 
       - name: Read VERSION file
         id: version
@@ -40,11 +44,13 @@ jobs:
 
       - name: Create and push tag
         if: steps.check_tag.outputs.exists == 'false'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git tag -a "${{ steps.version.outputs.VERSION_TAG }}" -m "Release ${{ steps.version.outputs.VERSION_TAG }}"
-          git push origin "${{ steps.version.outputs.VERSION_TAG }}"
+          git push https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git "${{ steps.version.outputs.VERSION_TAG }}"
           echo "✅ Tag ${{ steps.version.outputs.VERSION_TAG }} created and pushed"
           echo "🚀 This will trigger the release workflow to build and publish"
 
