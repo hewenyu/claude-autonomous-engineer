@@ -2,20 +2,101 @@
 name = "claude-autonomous"
 version = "1.0.0"
 edition = "2021"
-description = "Claude Autonomous Engineering CLI - Hook runner and project initializer"
-authors = ["Your Name"]
+description = "Claude Autonomous Engineering CLI - Complete Rust implementation"
+authors = ["Your Name <email@example.com>"]
 license = "MIT"
+repository = "https://github.com/hewenyu/claude-autonomous-engineer"
+readme = "README.md"
+keywords = ["claude", "autonomous", "engineering", "cli", "hooks"]
+categories = ["command-line-utilities", "development-tools"]
+
+[[bin]]
+name = "claude-autonomous"
+path = "src/main.rs"
+
+[lib]
+name = "claude_autonomous"
+path = "src/lib.rs"
 
 [dependencies]
-clap = { version = "4.4", features = ["derive"] }
+# CLI
+clap = { version = "4.5", features = ["derive", "cargo"] }
+colored = "2.1"
+
+# 序列化
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 serde_yaml = "0.9"
+
+# 错误处理
 anyhow = "1.0"
-colored = "2.0"
+thiserror = "1.0"
+
+# 工具
+regex = "1.10"
+lazy_static = "1.5"
+chrono = { version = "0.4", features = ["serde"] }
+md5 = "0.7"
 dirs = "5.0"
 
+# 资源嵌入
+rust-embed = "8.9"
+
 [profile.release]
-opt-level = "z"
-lto = true
-strip = true
+opt-level = "z"        # 优化大小
+lto = true             # 链接时优化
+strip = true           # 去除符号
+codegen-units = 1      # 更好的优化
+panic = "abort"        # 减小二进制大小
+
+[dev-dependencies]
+tempfile = "3.10"      # 测试用临时文件
+assert_cmd = "2.0"     # CLI 测试
+predicates = "3.1"     # 测试断言
+
+# ═══════════════════════════════════════════════════════════════════
+# DEB 包配置（cargo-deb）
+# ═══════════════════════════════════════════════════════════════════
+
+[package.metadata.deb]
+maintainer = "Claude Autonomous Team <noreply@anthropic.com>"
+copyright = "2025, Claude Autonomous Team"
+license-file = ["LICENSE", "0"]
+extended-description = """\
+Claude Autonomous Engineering CLI - A pure Rust implementation of autonomous \
+engineering toolkit with zero Python dependencies.
+
+Features:
+- 4 embedded hooks (inject_state, progress_sync, codex_review_gate, loop_driver)
+- 5 pre-installed agents (project-architect, codex-reviewer, code-executor, etc.)
+- Smart context management (80K/40K/30K token budgets)
+- Automatic state synchronization from ROADMAP.md to memory.json
+- Zero external dependencies - all resources embedded in binary
+
+Perfect for Claude Code autonomous engineering workflows."""
+
+depends = "$auto"
+section = "devel"
+priority = "optional"
+assets = [
+    ["target/release/claude-autonomous", "usr/bin/", "755"],
+    ["README.md", "usr/share/doc/claude-autonomous/", "644"],
+    ["LICENSE", "usr/share/doc/claude-autonomous/", "644"],
+]
+
+# ═══════════════════════════════════════════════════════════════════
+# RPM 包配置（cargo-rpm）
+# ═══════════════════════════════════════════════════════════════════
+
+[package.metadata.rpm]
+package = "claude-autonomous"
+
+[package.metadata.rpm.cargo]
+buildflags = ["--release"]
+
+[package.metadata.rpm.targets]
+claude-autonomous = { path = "/usr/bin/claude-autonomous" }
+
+[package.metadata.rpm.files]
+"../README.md" = { path = "/usr/share/doc/claude-autonomous/README.md" }
+"../LICENSE" = { path = "/usr/share/doc/claude-autonomous/LICENSE" }
