@@ -1,235 +1,343 @@
-# 🚀 Claude 自主工程系统 v2.0 - 增强版上下文管理
+# 🚀 Claude Autonomous Engineering System v3.0
 
-## 问题分析
+## 完整改进方案
 
-你的原始方案已经抓住了核心问题：**上下文压缩导致"记忆丢失"**。但原始的 `inject_state.py` 注入的信息太少：
+基于你的原始方案，我做了以下关键改进：
 
-```python
-# 原版只注入这些：
-context += f"Current State: {f.read()}\n"  # memory.json 全文
-context += line  # ROADMAP.md 未完成任务
-```
+### 核心改进对比
 
-这导致 Claude 在长时间运行后丢失：
-1. 代码库的整体结构
-2. 已实现函数的签名
-3. 错误历史和尝试过的解决方案
-4. API 契约细节
-5. 最近的文件变更
+| 问题 | 原始方案 | 改进方案 |
+|------|---------|---------|
+| 上下文注入量 | ~500 字符 | ~14,000 token（分层注入）|
+| Codex 审查 | 无上下文 | 自动注入 API 契约 + 任务规格 |
+| 进度同步 | 手动更新 | 自动同步（Hook 检测 MD 文件修改）|
+| Agent 信息复用 | 各自独立 | 统一上下文管理器 |
+| 错误记忆 | 无 | 完整错误历史 + 自动避免重复 |
 
 ---
 
-## 改进方案：多层上下文注入系统
-
-### 核心思想
-**不怕浪费 token，怕的是信息不够**。我们采用分层注入策略：
-
-```
-Layer 0: 系统指令 (最高优先级 - 必须存在)
-Layer 1: 当前状态 (memory.json)
-Layer 2: 待处理任务 (ROADMAP.md)
-Layer 3: 错误历史 (防止重复错误)
-Layer 4: API 契约 (接口规范)
-Layer 5: 活跃文件内容 (正在编辑的代码)
-Layer 6: 项目结构 (目录树 + 签名)
-Layer 7: Git 变更历史
-Layer 8: 最近决策日志
-```
-
-### 新增文件说明
+## 📁 系统架构
 
 ```
 .claude/
-├── CLAUDE.md                     # 🆕 增强版协议 (v2.0)
-├── settings.json                 # 🆕 更新的 hook 配置
+├── CLAUDE.md                     # 宪法级协议
+├── settings.json                 # Hook 配置
+│
+├── lib/
+│   └── context_manager.py        # 🆕 统一上下文管理器
+│                                  #    所有 Agent 和 Hook 的上下文来源
+│
 ├── hooks/
-│   ├── inject_state_v2.py        # 🆕 多层上下文注入
-│   ├── loop_driver_v2.py         # 🆕 智能循环驱动 (含死循环检测)
-│   ├── error_tracker.py          # 🆕 错误历史管理
-│   ├── code_digest.py            # 🆕 代码库摘要生成器
-│   ├── pre_write_check.py        # 🆕 写入前检查
-│   └── post_write_update.py      # 🆕 写入后状态更新
-└── status/
-    ├── memory.json.template      # 🆕 增强版状态模板
-    ├── error_history.json        # 🆕 错误历史
-    ├── code_digest.json          # 🆕 代码库摘要
-    └── recent_changes.json       # 🆕 最近变更记录
+│   ├── inject_state.py           # 每次交互注入完整上下文
+│   ├── progress_sync.py          # 🆕 MD 文件修改后自动同步进度
+│   ├── codex_review_gate.py      # 🆕 提交前自动审查（带完整上下文）
+│   └── loop_driver.py            # 控制自主循环
+│
+├── agents/
+│   ├── project-architect-supervisor.md  # 🆕 输出格式与系统对接
+│   ├── code-executor.md                 # 🆕 读取注入的上下文
+│   └── codex-reviewer.md                # 🆕 审查上下文说明
+│
+├── status/                       # 状态文件
+│   ├── ROADMAP.md                # 任务列表（Hook 自动解析）
+│   ├── api_contract.yaml         # API 契约（审查时自动注入）
+│   ├── memory.json               # 当前状态（自动同步）
+│   ├── error_history.json        # 🆕 错误历史
+│   └── decisions.log             # 🆕 决策日志
+│
+└── phases/                       # 阶段详情
+    └── phase-N_xxx/
+        ├── PHASE_PLAN.md
+        └── TASK-NNN_xxx.md       # 任务规格（自动注入给 executor）
 ```
 
 ---
 
-## 关键改进详解
+## 🔗 关键改进详解
 
-### 1. 多层上下文注入 (`inject_state_v2.py`)
+### 1. 统一上下文管理器 (`context_manager.py`)
 
-**改进前**：只注入 memory.json 和未完成任务（~500 字符）
+**问题**：原始方案中各个 Hook 和 Agent 各自读取文件，没有统一管理。
 
-**改进后**：注入多达 50,000 字符的分层上下文
+**改进**：创建统一的上下文管理器，提供不同场景的上下文组装：
 
 ```python
-# 按优先级注入不同类型的信息
-context_parts.append(generate_memory_state())        # 当前状态
-context_parts.append(generate_pending_tasks())       # 待处理任务
-context_parts.append(generate_error_context())       # 错误历史
-context_parts.append(generate_contract_summary())    # API 契约
-context_parts.append(generate_active_files_context()) # 活跃文件内容
-context_parts.append(get_project_structure())        # 项目结构
+from context_manager import ContextManager
+ctx = ContextManager()
+
+# 完整上下文（用于 UserPromptSubmit）
+full_context = ctx.get_full_context()
+
+# 审查上下文（用于 Codex Review）
+review_context = ctx.get_review_context(changed_files)
+
+# 任务上下文（用于 code-executor）
+task_context = ctx.get_task_context(task_id)
 ```
 
-### 2. 错误历史系统 (`error_tracker.py`)
+### 2. 自动进度同步 (`progress_sync.py`)
 
-防止 Claude 反复尝试已经失败的方案：
+**问题**：原始方案需要 Claude "记得"更新 memory.json。
+
+**改进**：PostToolUse Hook 自动检测 MD 文件修改并同步：
+
+```
+修改 ROADMAP.md → 自动解析任务状态 → 更新 memory.json.progress
+修改 TASK-xxx.md → 自动提取任务状态 → 更新 memory.json.current_task
+修改 PHASE_PLAN.md → 自动提取阶段信息 → 更新 memory.json.current_phase
+```
+
+### 3. Codex 审查上下文 (`codex_review_gate.py`)
+
+**问题**：Codex 审查时没有 API 契约和任务规格，无法有效验证。
+
+**改进**：提交前自动注入完整上下文：
+
+```
+git commit 触发 Hook
+        ↓
+获取 staged files
+        ↓
+调用 context_manager.get_review_context()
+        ↓
+注入：
+├── API 契约（验证签名）
+├── 任务规格（验证需求）
+├── 变更文件内容
+├── Git diff
+└── 错误历史（检查模式）
+        ↓
+Codex CLI 审查
+        ↓
+PASS → 允许提交
+FAIL → 阻止提交，反馈给 Claude
+```
+
+### 4. Agent 信息流
+
+**问题**：architect 生成的文件没有被后续流程自动消费。
+
+**改进**：建立清晰的信息流：
+
+```
+project-architect-supervisor
+        │
+        ├─── ROADMAP.md ─────────┐
+        ├─── api_contract.yaml ──┼─► progress_sync.py ─► memory.json
+        └─── TASK-xxx.md ────────┘         │
+                                           │
+        ┌──────────────────────────────────┘
+        ▼
+code-executor 自动收到：
+├── memory.json (当前任务)
+├── TASK-xxx.md (任务规格)
+├── api_contract.yaml (签名)
+└── error_history.json (避免重复)
+        │
+        ├─── 写代码
+        └─── git commit
+                │
+                ▼
+codex_review_gate.py 自动注入：
+├── api_contract.yaml (验证签名)
+├── TASK-xxx.md (验证需求)
+├── changed files (审查内容)
+└── error_history (检查模式)
+```
+
+---
+
+## 🚀 使用指南
+
+### 快速开始
 
 ```bash
-# 记录错误
-python3 error_tracker.py add "TASK-001" "ImportError: bcrypt" "尝试 pip install"
+# 1. 复制 .claude 目录到你的项目
+cp -r improved-system-v2/.claude /path/to/your/project/
 
-# 标记解决
-python3 error_tracker.py resolve "TASK-001" "安装了正确版本的依赖"
+# 2. 初始化
+cd /path/to/your/project
+chmod +x .claude/init.sh
+./.claude/init.sh "my-project-name"
 
-# 查看历史
-python3 error_tracker.py list
+# 3. 启动 Claude Code
+# 说: "Plan the project: [描述你的项目]"
 ```
 
-在每次任务开始时，`inject_state_v2.py` 会自动注入相关错误历史。
+### 初始化后的流程
 
-### 3. 代码库摘要 (`code_digest.py`)
+1. **Claude 调用 project-architect-supervisor**
+   - 生成 ROADMAP.md（任务列表）
+   - 生成 api_contract.yaml（API 契约）
+   - 生成 TASK-xxx.md（任务规格）
 
-预先扫描代码库，提取所有函数/类签名：
+2. **确认后进入自主循环**
+   - inject_state.py 自动注入上下文
+   - code-executor 执行任务
+   - progress_sync.py 自动同步进度
+   - codex_review_gate.py 自动审查
+   - loop_driver.py 控制循环
 
-```bash
-python3 code_digest.py generate .
+3. **循环直到完成**
+   - 每次交互都有完整上下文
+   - 每次文件修改都自动同步
+   - 每次提交都自动审查
+   - 任务完成自动继续下一个
+
+---
+
+## 📊 上下文注入详情
+
+### 注入内容（~14,000 token）
+
+```
+╔══════════════════════════════════════════════════════════════════╗
+║  Layer 0: 系统头部 (~200 token)                                   ║
+║  - 警告信息：不要相信记忆，信任文件                               ║
+║  - 模式指示：AUTONOMOUS / REVIEW / TASK                          ║
+╠══════════════════════════════════════════════════════════════════╣
+║  Layer 1: 当前状态 (~500 token)                                   ║
+║  - current_task (ID, 名称, 状态, 重试次数)                        ║
+║  - working_context (当前文件, 待处理测试)                         ║
+║  - next_action (下一步行动)                                       ║
+╠══════════════════════════════════════════════════════════════════╣
+║  Layer 2: 任务列表 (~1,000 token)                                 ║
+║  - 总体进度 (完成/总数)                                           ║
+║  - 待处理任务列表                                                 ║
+║  - 当前阶段                                                       ║
+╠══════════════════════════════════════════════════════════════════╣
+║  Layer 3: 当前任务规格 (~1,000 token)                             ║
+║  - TASK-xxx.md 完整内容                                           ║
+║  - 需求、文件列表、验收标准                                       ║
+╠══════════════════════════════════════════════════════════════════╣
+║  Layer 4: API 契约 (~3,000 token)                                 ║
+║  - 函数签名、参数类型、返回类型                                    ║
+║  - 异常规范                                                       ║
+╠══════════════════════════════════════════════════════════════════╣
+║  Layer 5: 错误历史 (~1,000 token)                                 ║
+║  - 未解决的错误（避免重复！）                                      ║
+║  - 已解决的错误（学习经验）                                        ║
+╠══════════════════════════════════════════════════════════════════╣
+║  Layer 6: 活跃文件 (~5,000 token)                                 ║
+║  - 当前正在编辑的文件内容                                          ║
+║  - 最近修改的文件                                                  ║
+╠══════════════════════════════════════════════════════════════════╣
+║  Layer 7: 项目结构 (~2,000 token)                                 ║
+║  - 目录树                                                         ║
+║  - 关键函数签名                                                    ║
+╚══════════════════════════════════════════════════════════════════╝
 ```
 
-生成的摘要可以帮助 Claude 快速理解代码结构，即使在上下文压缩后也能"记住"代码库的整体架构。
+### 不同场景的上下文
 
-### 4. 智能循环驱动 (`loop_driver_v2.py`)
+| 场景 | 上下文类型 | 大小 |
+|------|-----------|------|
+| 每次交互 | `get_full_context()` | ~14K token |
+| 代码审查 | `get_review_context()` | ~8K token |
+| 单任务执行 | `get_task_context()` | ~6K token |
 
-**改进前**：只检查是否有未完成任务
+---
 
-**改进后**：
-- 检测死循环（同一任务失败 N 次）
-- 检测连续错误过多
-- 提供具体的恢复建议
-- 支持紧急熔断
+## ⚙️ 配置说明
 
-### 5. 写入钩子 (`pre_write_check.py` + `post_write_update.py`)
-
-- **写入前**：检查是否违反契约，更新活跃文件列表
-- **写入后**：记录变更历史，更新检查点
-
-### 6. 增强版 memory.json
+### settings.json
 
 ```json
 {
-  "session": { ... },           // 会话级信息
-  "current_task": { ... },      // 当前任务详情
-  "active_files": [...],        // 活跃文件列表（新增）
-  "working_context": {          // 工作上下文（新增）
-    "current_file": "...",
-    "current_function": "...",
-    "pending_tests": [...],
-    "pending_implementations": [...]
-  },
-  "error_state": { ... },       // 错误状态
-  "checkpoints": [...],         // 检查点历史（新增）
-  "decisions_made": [...],      // 决策历史（新增）
-  "next_action": { ... }        // 下一步行动
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "matcher": "*",
+        "hooks": [{
+          "type": "command",
+          "command": "python3 .claude/hooks/inject_state.py"
+        }]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [{
+          "type": "command",
+          "command": "python3 .claude/hooks/codex_review_gate.py"
+        }]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|Create",
+        "hooks": [{
+          "type": "command",
+          "command": "python3 .claude/hooks/progress_sync.py"
+        }]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [{
+          "type": "command",
+          "command": "python3 .claude/hooks/loop_driver.py"
+        }]
+      }
+    ]
+  }
 }
 ```
 
----
-
-## 使用指南
-
-### 初始化项目
+### 环境变量
 
 ```bash
-# 1. 创建状态目录
-mkdir -p .claude/status
+# 审查严格程度
+export REVIEW_MODE=strict|normal|lenient
 
-# 2. 初始化 memory.json
-cp .claude/status/memory.json.template .claude/status/memory.json
-
-# 3. 生成代码摘要
-python3 .claude/hooks/code_digest.py generate .
-
-# 4. 创建 ROADMAP.md
-# (使用 project-architect-supervisor agent)
+# Codex CLI 路径（如果不在 PATH 中）
+export CODEX_CMD=/path/to/codex
 ```
 
-### 运行循环
+---
+
+## 🔧 故障排除
+
+### Hook 不工作
 
 ```bash
-# 启动 Claude Code，它会自动：
-# 1. 每次交互注入完整上下文
-# 2. 写入文件时自动追踪
-# 3. 尝试停止时检查任务完成度
+# 检查 Python
+python3 --version
+
+# 测试 inject_state
+echo '{}' | python3 .claude/hooks/inject_state.py
+
+# 检查 settings.json 语法
+python3 -c "import json; json.load(open('.claude/settings.json'))"
 ```
 
----
+### 上下文没有注入
 
-## Token 使用估算
+1. 检查 `.claude/lib/context_manager.py` 是否存在
+2. 检查 `.claude/status/` 目录下的文件是否存在
+3. 查看 Claude Code 日志
 
-| 组件 | 估算 Token 数 |
-|------|-------------|
-| 系统指令 | ~200 |
-| memory.json | ~500 |
-| 待处理任务 | ~500 |
-| 错误历史 | ~1,000 |
-| API 契约 | ~2,000 |
-| 活跃文件（5个）| ~5,000 |
-| 项目结构 | ~2,000 |
-| Git 历史 | ~500 |
-| **总计** | **~12,000** |
+### Codex 审查不触发
 
-在 200K 上下文窗口中，这只占 6%，完全可以接受。
+1. 确认是 `git commit` 命令
+2. 确认有 staged files (`git status`)
+3. 检查 Codex CLI 是否可用 (`codex --version`)
 
 ---
 
-## 进一步优化建议
+## 📈 效果预期
 
-### 1. 添加向量检索（高级）
-如果代码库很大，可以集成向量数据库：
-- 每个函数生成 embedding
-- 根据当前任务检索最相关的代码片段
-
-### 2. 添加 AST 分析
-更精确地提取代码结构：
-```python
-import ast
-tree = ast.parse(code)
-# 提取类、函数、依赖关系
-```
-
-### 3. 添加 Test Coverage 追踪
-知道哪些代码已经被测试覆盖，哪些还没有。
-
-### 4. 添加 Dependency Graph
-追踪模块之间的依赖关系，避免循环依赖和不一致的修改。
+| 指标 | 原始方案 | 改进后 |
+|------|---------|-------|
+| 上下文丢失 | 频繁 | 极少（自动注入）|
+| 重复错误 | 常见 | 自动避免 |
+| 进度追踪 | 手动 | 自动同步 |
+| 代码质量 | 依赖记忆 | 自动审查 |
+| 任务连续性 | 容易中断 | 自动恢复 |
 
 ---
 
-## 常见问题
+## License
 
-**Q: 注入这么多内容会不会太慢？**
-A: `inject_state_v2.py` 执行时间通常 < 100ms，对用户体验影响极小。
-
-**Q: 如何知道上下文注入是否工作？**
-A: 检查 Claude 的响应是否引用了注入的信息，如 "Based on memory.json, the current task is..."
-
-**Q: 如何调整注入的信息量？**
-A: 修改 `inject_state_v2.py` 中的 `CONTEXT_BUDGET` 变量。
-
----
-
-## 总结
-
-你的原始方案方向是对的，但需要更"激进"地注入上下文。核心改进：
-
-1. **更多信息**：从 ~500 字符提升到 ~12,000 token
-2. **更结构化**：分层注入，优先级明确
-3. **更智能**：自动追踪错误历史、活跃文件、代码结构
-4. **更健壮**：死循环检测、紧急熔断
-
-记住：**不怕浪费 token，怕的是信息不够**。在 200K 上下文窗口时代，我们有充足的空间来保证 Claude 的"记忆"持久可靠。
+MIT
