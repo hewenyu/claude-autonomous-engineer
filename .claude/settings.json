@@ -6,7 +6,7 @@
         "hooks":[
           {
             "type": "command",
-            "command": "python3 .claude/hooks/log_user_prompt.py" 
+            "command": "python3 .claude/hooks/inject_state.py" 
           }
         ]
       }
