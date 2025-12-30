@@ -1,9 +1,9 @@
 [package]
 name = "claude-autonomous"
-version = "1.0.0"
+version = "1.0.1"
 edition = "2021"
 description = "Claude Autonomous Engineering CLI - Complete Rust implementation"
-authors = ["Your Name <email@example.com>"]
+authors = ["hewenyu <yuebanlaosiji@outlook.com>"]
 license = "MIT"
 repository = "https://github.com/hewenyu/claude-autonomous-engineer"
 readme = "README.md"
