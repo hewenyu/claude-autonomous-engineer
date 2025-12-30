@@ -37,14 +37,10 @@ jobs:
         id: version
         run: echo "VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')" >> $GITHUB_OUTPUT
 
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create Release and Upload Assets
+        uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
+          name: Release ${{ github.ref_name }}
           draft: false
           prerelease: false
           body: |
@@ -72,26 +68,9 @@ jobs:
 
             ### What's Changed
             - See commit history for details
-
-      - name: Upload DEB package
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./target/debian/claude-autonomous_${{ steps.version.outputs.VERSION }}_amd64.deb
-          asset_name: claude-autonomous_${{ steps.version.outputs.VERSION }}_amd64.deb
-          asset_content_type: application/vnd.debian.binary-package
-
-      - name: Upload binary
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./target/release/claude-autonomous
-          asset_name: claude-autonomous-linux-x86_64
-          asset_content_type: application/octet-stream
+          files: |
+            ./target/debian/claude-autonomous_${{ steps.version.outputs.VERSION }}_amd64.deb
+            ./target/release/claude-autonomous
 
   publish-crates:
     name: Publish to crates.io
