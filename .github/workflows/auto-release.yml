@@ -1,4 +1,4 @@
-name: Auto Tag on VERSION Change
+name: Auto Release on VERSION Change
 
 on:
   push:
@@ -9,19 +9,21 @@ on:
       - 'VERSION'
 
 permissions:
-  contents: write  # 允许创建和推送 tag
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
 
 jobs:
-  create-tag:
-    name: Create Git Tag from VERSION
+  build-and-release:
+    name: Build and Release
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # 获取完整历史，用于检查 tag
-          token: ${{ secrets.GITHUB_TOKEN }}  # 使用 GitHub Token 进行认证
+          fetch-depth: 0
 
       - name: Read VERSION file
         id: version
@@ -36,29 +38,67 @@ jobs:
         run: |
           if git rev-parse "v${{ steps.version.outputs.VERSION }}" >/dev/null 2>&1; then
             echo "exists=true" >> $GITHUB_OUTPUT
-            echo "⚠️  Tag v${{ steps.version.outputs.VERSION }} already exists"
+            echo "⚠️  Tag v${{ steps.version.outputs.VERSION }} already exists, stopping"
+            exit 1
           else
             echo "exists=false" >> $GITHUB_OUTPUT
-            echo "✅ Tag v${{ steps.version.outputs.VERSION }} does not exist, will create"
+            echo "✅ Tag v${{ steps.version.outputs.VERSION }} does not exist, proceeding with release"
           fi
 
-      - name: Create and push tag
-        if: steps.check_tag.outputs.exists == 'false'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a "${{ steps.version.outputs.VERSION_TAG }}" -m "Release ${{ steps.version.outputs.VERSION_TAG }}"
-          git push https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git "${{ steps.version.outputs.VERSION_TAG }}"
-          echo "✅ Tag ${{ steps.version.outputs.VERSION_TAG }} created and pushed"
-          echo "🚀 This will trigger the release workflow to build and publish"
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
 
-      - name: Skip - Tag already exists
-        if: steps.check_tag.outputs.exists == 'true'
-        run: |
-          echo "ℹ️  Tag v${{ steps.version.outputs.VERSION }} already exists, skipping"
-          echo ""
-          echo "If you want to re-release, delete the existing tag first:"
-          echo "  git tag -d v${{ steps.version.outputs.VERSION }}"
-          echo "  git push origin :refs/tags/v${{ steps.version.outputs.VERSION }}"
+      - name: Run tests
+        run: cargo test --all --release
+
+      - name: Build release binary
+        run: cargo build --release
+
+      - name: Install cargo-deb
+        run: cargo install cargo-deb
+
+      - name: Build DEB package
+        run: cargo deb
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.VERSION_TAG }}
+          name: Release ${{ steps.version.outputs.VERSION_TAG }}
+          draft: false
+          prerelease: false
+          body: |
+            ## Claude Autonomous Engineering ${{ steps.version.outputs.VERSION_TAG }}
+
+            ### Features
+            - ⚡ Zero Python dependencies - Pure Rust implementation
+            - 📦 5 embedded agents and all templates
+            - 🪝 4 built-in hooks (inject_state, progress_sync, codex_review_gate, loop_driver)
+            - 🚀 Fast startup (< 50ms)
+            - 📊 Rich CLI with colored output
+
+            ### Installation
+
+            **Debian/Ubuntu:**
+            ```bash
+            wget https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.VERSION_TAG }}/claude-autonomous_${{ steps.version.outputs.VERSION }}_amd64.deb
+            sudo dpkg -i claude-autonomous_${{ steps.version.outputs.VERSION }}_amd64.deb
+            ```
+
+            **From binary:**
+            ```bash
+            wget https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.VERSION_TAG }}/claude-autonomous
+            chmod +x claude-autonomous
+            sudo mv claude-autonomous /usr/local/bin/
+            ```
+
+            **From source:**
+            ```bash
+            cargo install claude-autonomous
+            ```
+
+            ### What's Changed
+            - Auto-released by VERSION file update to ${{ steps.version.outputs.VERSION }}
+          files: |
+            ./target/debian/claude-autonomous_${{ steps.version.outputs.VERSION }}_amd64.deb
+            ./target/release/claude-autonomous
