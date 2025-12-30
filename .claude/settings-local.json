@@ -1,0 +1,40 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "type": "command",
+        "command": "python3 .claude/hooks/inject_context.py"
+      }
+    ],
+    "PreToolUse": [],
+    "PostToolUse": [],
+    "Stop": [
+      {
+        "type": "command",
+        "command": "python3 .claude/hooks/loop_driver.py"
+      }
+    ]
+  },
+  "commands": {
+    "architect": {
+      "type": "prompt",
+      "file": ".claude/agents/project-architect-supervisor.md",
+      "hooks": []
+    },
+    "executor": {
+      "type": "prompt",
+      "file": ".claude/agents/code-executor.md",
+      "hooks": []
+    },
+    "designer": {
+      "type": "prompt",
+      "file": ".claude/agents/visual-designer.md",
+      "hooks": []
+    },
+    "prd": {
+      "type": "prompt",
+      "file": ".claude/agents/prd-generator.md",
+      "hooks": []
+    }
+  }
+}
