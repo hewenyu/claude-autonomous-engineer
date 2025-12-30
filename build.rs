@@ -15,8 +15,7 @@ fn main() {
 
     // 同步版本号到 Cargo.toml
     let cargo_toml_path = "Cargo.toml";
-    let content = fs::read_to_string(cargo_toml_path)
-        .expect("Failed to read Cargo.toml");
+    let content = fs::read_to_string(cargo_toml_path).expect("Failed to read Cargo.toml");
 
     // 替换 package 的 version
     let new_content = content
@@ -35,7 +34,6 @@ fn main() {
 
     // 只在版本号确实变化时才写入
     if content != new_content {
-        fs::write(cargo_toml_path, new_content)
-            .expect("Failed to write Cargo.toml");
+        fs::write(cargo_toml_path, new_content).expect("Failed to write Cargo.toml");
     }
 }
