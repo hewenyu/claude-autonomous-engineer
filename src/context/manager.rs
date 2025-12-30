@@ -422,16 +422,16 @@ impl ContextManager {
 
     /// 获取完整上下文（用于 UserPromptSubmit）
     pub fn get_full_context(&self) -> Result<String> {
-        let mut parts = Vec::new();
-
-        parts.push(self.get_system_header(ContextMode::Autonomous));
-        parts.push(self.get_memory_context()?);
-        parts.push(self.get_roadmap_context(false)?);
-        parts.push(self.get_current_task_spec()?);
-        parts.push(self.get_error_context(None)?);
-        parts.push(self.get_contract_context()?);
-        parts.push(self.get_git_context(10)?);
-        parts.push(self.get_decisions_context(20)?);
+        let parts = vec![
+            self.get_system_header(ContextMode::Autonomous),
+            self.get_memory_context()?,
+            self.get_roadmap_context(false)?,
+            self.get_current_task_spec()?,
+            self.get_error_context(None)?,
+            self.get_contract_context()?,
+            self.get_git_context(10)?,
+            self.get_decisions_context(20)?,
+        ];
 
         let mut ctx = parts.join("");
 
@@ -455,13 +455,13 @@ impl ContextManager {
 
     /// 获取代码审查上下文
     pub fn get_review_context(&self, _changed_files: &[String]) -> Result<String> {
-        let mut parts = Vec::new();
-
-        parts.push(self.get_system_header(ContextMode::Review));
-        parts.push(self.get_memory_context()?);
-        parts.push(self.get_current_task_spec()?);
-        parts.push(self.get_contract_context()?);
-        parts.push(self.get_error_context(None)?);
+        let parts = vec![
+            self.get_system_header(ContextMode::Review),
+            self.get_memory_context()?,
+            self.get_current_task_spec()?,
+            self.get_contract_context()?,
+            self.get_error_context(None)?,
+        ];
 
         let mut ctx = parts.join("");
 
@@ -484,13 +484,13 @@ impl ContextManager {
 
     /// 获取任务上下文
     pub fn get_task_context(&self, task_id: &str) -> Result<String> {
-        let mut parts = Vec::new();
-
-        parts.push(self.get_system_header(ContextMode::Task));
-        parts.push(self.get_memory_context()?);
-        parts.push(self.get_current_task_spec()?);
-        parts.push(self.get_contract_context()?);
-        parts.push(self.get_error_context(Some(task_id))?);
+        let parts = vec![
+            self.get_system_header(ContextMode::Task),
+            self.get_memory_context()?,
+            self.get_current_task_spec()?,
+            self.get_contract_context()?,
+            self.get_error_context(Some(task_id))?,
+        ];
 
         let ctx = parts.join("");
         Ok(truncate_middle(&ctx, BUDGET_TASK))
