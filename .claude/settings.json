@@ -6,40 +6,47 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 .claude/hooks/inject_state_v2.py"
+            "command": "python3 .claude/hooks/inject_state.py",
+            "timeout": 5000
           }
         ]
       }
     ],
+    
     "PreToolUse": [
       {
-        "matcher": "Write|Edit|Create",
+        "matcher": "Bash",
         "hooks": [
           {
             "type": "command",
-            "command": "python3 .claude/hooks/pre_write_check.py"
+            "command": "python3 .claude/hooks/codex_review_gate.py",
+            "timeout": 180000
           }
         ]
       }
     ],
+    
     "PostToolUse": [
       {
         "matcher": "Write|Edit|Create",
         "hooks": [
           {
             "type": "command",
-            "command": "python3 .claude/hooks/post_write_update.py"
+            "command": "python3 .claude/hooks/progress_sync.py",
+            "timeout": 5000
           }
         ]
       }
     ],
+    
     "Stop": [
       {
         "matcher": "*",
         "hooks": [
           {
             "type": "command",
-            "command": "python3 .claude/hooks/loop_driver_v2.py"
+            "command": "python3 .claude/hooks/loop_driver.py",
+            "timeout": 5000
           }
         ]
       }
