@@ -34,6 +34,12 @@ jobs:
           echo "VERSION_TAG=v$VERSION" >> $GITHUB_OUTPUT
           echo "📦 Version from VERSION file: $VERSION"
 
+      - name: Sync VERSION to Cargo.toml
+        run: |
+          VERSION=$(cat VERSION | tr -d '[:space:]')
+          sed -i "0,/^version = /s/^version = .*/version = \"$VERSION\"/" Cargo.toml
+          echo "✅ Synced version $VERSION to Cargo.toml"
+
       - name: Check if tag exists
         id: check_tag
         run: |
@@ -64,7 +70,7 @@ jobs:
       - name: Publish to crates.io
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.TOKEN }}
-        run: cargo publish --allow-dirty --no-verify
+        run: cargo publish
 
       - name: Create Release
         uses: softprops/action-gh-release@v2

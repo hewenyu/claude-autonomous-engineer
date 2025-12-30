@@ -1,6 +1,6 @@
 [package]
 name = "claude-autonomous"
-version = "1.0.1"
+version = "1.0.2"
 edition = "2021"
 description = "Claude Autonomous Engineering CLI - Complete Rust implementation"
 authors = ["hewenyu <yuebanlaosiji@outlook.com>"]
