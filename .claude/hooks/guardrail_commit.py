@@ -1,6 +1,7 @@
 import sys
 import json
 import subprocess
+import shutil
 
 # 读取工具输入
 input_data = json.loads(sys.stdin.read())
@@ -11,25 +12,40 @@ if 'git commit' not in command:
     print(json.dumps({"permissionDecision": "allow"}))
     sys.exit(0)
 
-# 执行 Codex 审查 (假设 codex CLI 已安装)
-# 你可以替换为你实际的 codex 命令，例如: codex review --diff
+# 执行 Codex 审查（要求本机已安装 `codex` CLI）
 try:
-    # 模拟运行 codex，实际使用时请去掉 echo 并换成真实命令
-    # result = subprocess.run(['codex', 'review', '--diff'], capture_output=True, text=True)
-    # 这里为了演示，假设我们有一个 check_code.sh 脚本
-    print(json.dumps({"permissionDecision": "allow"}), file=sys.stderr) # 调试日志
-    
-    # 真实逻辑：
-    # if result.returncode!= 0:
-    #     failure_reason = f"Codex Review FAILED:\n{result.stderr}\n\nFIX THE CODE BEFORE COMMITTING."
-    #     print(json.dumps({
-    #         "permissionDecision": "deny",
-    #         "permissionDecisionReason": failure_reason
-    #     }))
-    # else:
-    #     print(json.dumps({"permissionDecision": "allow"}))
+    if shutil.which("codex") is None:
+        print(json.dumps({
+            "permissionDecision": "deny",
+            "permissionDecisionReason": "Commit guardrail is enabled but `codex` CLI was not found on PATH. Install `codex` or disable this PreToolUse hook."
+        }))
+        sys.exit(0)
 
-    # 暂时全部放行，请根据你的环境取消上面的注释
+    codex_path = shutil.which("codex")
+    if codex_path is not None and not shutil.os.access(codex_path, shutil.os.X_OK):
+        print(json.dumps({
+            "permissionDecision": "deny",
+            "permissionDecisionReason": f"Commit guardrail is enabled but `codex` at `{codex_path}` is not executable. Fix permissions or disable this PreToolUse hook."
+        }))
+        sys.exit(0)
+
+    result = subprocess.run(
+        ["codex", "review"],
+        capture_output=True,
+        text=True,
+    )
+
+    if result.returncode != 0:
+        failure_reason = (
+            "Codex review FAILED. Fix issues and re-run `codex review`.\n\n"
+            f"STDOUT:\n{result.stdout}\n\nSTDERR:\n{result.stderr}"
+        )
+        print(json.dumps({
+            "permissionDecision": "deny",
+            "permissionDecisionReason": failure_reason
+        }))
+        sys.exit(0)
+
     print(json.dumps({"permissionDecision": "allow"}))
 
 except Exception as e:

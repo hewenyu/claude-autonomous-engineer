@@ -23,7 +23,7 @@ if os.path.exists(roadmap_file):
     with open(roadmap_file, 'r') as f:
         lines = f.readlines()
         for line in lines:
-            if "[ ]" in line: # 只显示未勾选的任务
+            if line.lstrip().startswith("- [ ]"):  # 只显示未勾选的任务
                 context += line
 
 context += "================================\n"
