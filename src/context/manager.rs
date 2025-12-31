@@ -218,9 +218,10 @@ impl ContextManager {
         let data = parse_roadmap(&content)?;
 
         let mut ctx = String::from("\n## 📋 ROADMAP\n");
+        let done = data.completed.len() + data.skipped.len();
         ctx.push_str(&format!(
-            "\n**Progress**: {}/{} tasks completed\n",
-            data.completed.len(),
+            "\n**Progress**: {}/{} tasks done (completed + skipped)\n",
+            done,
             data.total
         ));
 

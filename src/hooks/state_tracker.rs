@@ -59,7 +59,7 @@ impl TaskStateTracker {
     pub fn detect_transition(&self, current: &CurrentTask) -> bool {
         if let Some(task_id) = &current.id {
             if let Some(snapshot) = self.snapshots.get(task_id) {
-                snapshot.status != current.status
+                normalize_task_status(&snapshot.status) != normalize_task_status(&current.status)
             } else {
                 // 第一次记录，不算转换
                 false
@@ -79,10 +79,12 @@ impl TaskStateTracker {
         let previous_status = self
             .snapshots
             .get(task_id)
-            .map(|s| s.status.as_str())
-            .unwrap_or("UNKNOWN");
+            .map(|s| normalize_task_status(&s.status))
+            .unwrap_or_else(|| "UNKNOWN".to_string());
 
-        match (previous_status, current.status.as_str()) {
+        let current_status = normalize_task_status(&current.status);
+
+        match (previous_status.as_str(), current_status.as_str()) {
             ("PENDING", "IN_PROGRESS") => TransitionType::StartTask,
             ("IN_PROGRESS", "COMPLETED") => TransitionType::CompleteTask,
             ("IN_PROGRESS", "BLOCKED") => TransitionType::BlockTask,
@@ -100,7 +102,7 @@ impl TaskStateTracker {
     pub fn update_snapshot(&mut self, current: &CurrentTask) -> Result<()> {
         if let Some(task_id) = &current.id {
             let snapshot = TaskSnapshot {
-                status: current.status.clone(),
+                status: normalize_task_status(&current.status),
                 snapshot_time: chrono::Utc::now().to_rfc3339(),
                 task_id: task_id.clone(),
             };
@@ -130,6 +132,17 @@ impl TaskStateTracker {
     pub fn clear(&mut self) -> Result<()> {
         self.snapshots.clear();
         self.save()
+    }
+}
+
+fn normalize_task_status(status: &str) -> String {
+    let normalized = status.trim().to_uppercase().replace(' ', "_");
+    match normalized.as_str() {
+        "NOT_STARTED" => "PENDING".to_string(),
+        "DONE" => "COMPLETED".to_string(),
+        "COMPLETE" => "COMPLETED".to_string(),
+        "SKIPPED" => "COMPLETED".to_string(),
+        other => other.to_string(),
     }
 }
 

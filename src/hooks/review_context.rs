@@ -8,6 +8,7 @@ use crate::utils::try_read_file;
 use anyhow::Result;
 use std::path::Path;
 use std::process::Command;
+use std::path::PathBuf;
 
 /// 审查模式
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -200,19 +201,58 @@ fn read_task_spec(project_root: &Path, task_id: &Option<String>) -> Result<Strin
         None => return Ok("*No current task*".to_string()),
     };
 
-    // 尝试多个可能的路径
-    let possible_paths = vec![
-        project_root.join(format!(".claude/phases/{}.md", task_id)),
-        project_root.join(format!(".claude/status/{}.md", task_id)),
-    ];
-
-    for path in possible_paths {
+    if let Some(path) = find_task_spec_file(project_root, task_id) {
         if let Some(content) = try_read_file(&path) {
             return Ok(content);
         }
     }
 
     Ok(format!("*Task spec for {} not found*", task_id))
+}
+
+fn find_task_spec_file(project_root: &Path, task_id: &str) -> Option<PathBuf> {
+    // 1) Explicit status path (simple override)
+    let status_candidate = project_root.join(format!(".claude/status/{}.md", task_id));
+    if status_candidate.exists() {
+        return Some(status_candidate);
+    }
+
+    // 2) Search under phases (expected layout: .claude/phases/phase-N_xxx/TASK-NNN_xxx.md)
+    let phases_root = project_root.join(".claude/phases");
+    if !phases_root.is_dir() {
+        return None;
+    }
+
+    fn walk(dir: &Path, task_id: &str, depth_left: usize) -> Option<PathBuf> {
+        if depth_left == 0 {
+            return None;
+        }
+
+        let entries = std::fs::read_dir(dir).ok()?;
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let ft = entry.file_type().ok()?;
+
+            if ft.is_dir() {
+                if let Some(found) = walk(&path, task_id, depth_left - 1) {
+                    return Some(found);
+                }
+                continue;
+            }
+
+            if !ft.is_file() {
+                continue;
+            }
+
+            let filename = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            if filename.ends_with(".md") && filename.contains(task_id) {
+                return Some(path);
+            }
+        }
+        None
+    }
+
+    walk(&phases_root, task_id, 4)
 }
 
 /// 读取 API 契约
@@ -258,5 +298,18 @@ mod tests {
         let result = get_staged_diff(temp.path()).unwrap();
         // 空仓库/无暂存修改时，应返回占位文案或空 diff
         assert!(!result.is_empty());
+    }
+
+    #[test]
+    fn test_find_task_spec_file_in_phases() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let phases_dir = temp.path().join(".claude/phases/phase-1_test");
+        std::fs::create_dir_all(&phases_dir).unwrap();
+
+        let task_path = phases_dir.join("TASK-001_test.md");
+        std::fs::write(&task_path, "# TASK-001: Example\n").unwrap();
+
+        let found = find_task_spec_file(temp.path(), "TASK-001").unwrap();
+        assert_eq!(found, task_path);
     }
 }

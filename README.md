@@ -328,6 +328,7 @@ Claude: "TASK-003: 添加集成测试..."
 | `hook inject_state` | UserPromptSubmit | 注入上下文到 Claude |
 | `hook progress_sync` | PostToolUse (Write/Edit) | 同步 Markdown 进度到 memory.json |
 | `hook codex_review_gate` | PreToolUse (Bash - git commit) | Git commit 前审查代码 |
+| `hook error_tracker` | PostToolUse (Bash) | 记录失败命令到 error_history.json，并递增 retry_count |
 | `hook loop_driver` | Stop | 检查是否还有任务，决定是否继续 |
 
 ## 🏗️ 系统架构
@@ -439,13 +440,22 @@ claude-autonomous root
         "command": "claude-autonomous hook inject_state"
       }]
     }],
-    "PostToolUse": [{
-      "matcher": "Write|Edit",
-      "hooks": [{
-        "type": "command",
-        "command": "claude-autonomous hook progress_sync"
-      }]
-    }],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|Create",
+        "hooks": [{
+          "type": "command",
+          "command": "claude-autonomous hook progress_sync"
+        }]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [{
+          "type": "command",
+          "command": "claude-autonomous hook error_tracker"
+        }]
+      }
+    ],
     "PreToolUse": [{
       "matcher": "Bash",
       "hooks": [{
@@ -549,8 +559,9 @@ claude-autonomous root
 
 ```markdown
 # ROADMAP.md
-- [!] TASK-005: 实现 OAuth (BLOCKED: 需要外部 API key)
-- [ ] TASK-006: 实现本地认证  ← 跳到这个
+- [!] TASK-005: 实现 OAuth (BLOCKED: 需要外部 API key)   # 阻塞：会阻止整体完成
+- [-] TASK-007: 集成第三方支付 (SKIPPED: 暂不做)           # 跳过：不阻止整体完成
+- [ ] TASK-006: 实现本地认证                               # 继续下一个
 ```
 
 ### Q: 如何自定义 agents？

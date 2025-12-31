@@ -187,6 +187,20 @@ modules:
     fs::write(&contract_path, contract_template)?;
     println!("  ✓ {}", ".claude/status/api_contract.yaml".cyan());
 
+    // requirements.md 模板（可选但推荐）
+    let requirements_template = r#"# Requirements
+
+Describe the original user request / PRD here.
+
+- Goals:
+- Non-goals:
+- Constraints:
+- Acceptance criteria:
+"#;
+    let requirements_path = project_root.join(".claude/status/requirements.md");
+    fs::write(&requirements_path, requirements_template)?;
+    println!("  ✓ {}", ".claude/status/requirements.md".cyan());
+
     // error_history.json 初始化为空数组
     let error_history_path = project_root.join(".claude/status/error_history.json");
     fs::write(&error_history_path, "[]")?;
@@ -230,6 +244,7 @@ mod tests {
             .path()
             .join(".claude/status/api_contract.yaml")
             .exists());
+        assert!(temp.path().join(".claude/status/requirements.md").exists());
 
         // 验证 agent 文件
         let agents_dir = temp.path().join(".claude/agents");

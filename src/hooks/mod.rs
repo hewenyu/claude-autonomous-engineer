@@ -3,6 +3,7 @@
 //! 实现 4 个 hook：inject_state, progress_sync, codex_review_gate, loop_driver
 
 pub mod codex_review_gate;
+pub mod error_tracker;
 pub mod inject_state;
 pub mod loop_driver;
 pub mod progress_sync;
@@ -16,6 +17,7 @@ pub mod state_tracker;
 
 // 重导出
 pub use codex_review_gate::*;
+pub use error_tracker::*;
 pub use inject_state::*;
 pub use loop_driver::*;
 pub use progress_sync::*;

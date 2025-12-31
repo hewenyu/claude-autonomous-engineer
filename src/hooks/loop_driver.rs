@@ -201,6 +201,13 @@ fn check_stuck(project_root: &Path) -> Result<StuckStatus> {
         let task_errors: Vec<_> = errors
             .iter()
             .filter(|e| {
+                let kind = e
+                    .get("kind")
+                    .and_then(|k| k.as_str())
+                    .unwrap_or("command_failure");
+                if kind == "test_failure" {
+                    return false;
+                }
                 e.get("task")
                     .and_then(|t| t.as_str())
                     .map(|t| t == task_id)
@@ -226,7 +233,16 @@ fn check_stuck(project_root: &Path) -> Result<StuckStatus> {
             .iter()
             .rev()
             .take(MAX_CONSECUTIVE_ERRORS)
-            .filter(|e| e.get("resolution").is_none() || e["resolution"].is_null())
+            .filter(|e| {
+                let kind = e
+                    .get("kind")
+                    .and_then(|k| k.as_str())
+                    .unwrap_or("command_failure");
+                if kind == "test_failure" {
+                    return false;
+                }
+                e.get("resolution").is_none() || e["resolution"].is_null()
+            })
             .collect();
 
         if recent_unresolved.len() >= MAX_CONSECUTIVE_ERRORS {
