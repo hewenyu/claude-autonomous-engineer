@@ -335,10 +335,10 @@ mod tests {
 
             let result = run_codex_review_gate_hook(temp.path(), &input).unwrap();
             assert_eq!(
-                result["hookSpecificOutput"]["for PreToolUse"]["permissionDecision"],
+                result["hookSpecificOutput"]["permissionDecision"],
                 "deny"
             );
-            assert!(result["hookSpecificOutput"]["for PreToolUse"]["permissionDecisionReason"]
+            assert!(result["hookSpecificOutput"]["permissionDecisionReason"]
                 .as_str()
                 .unwrap()
                 .contains("commit blocked"));
@@ -372,10 +372,10 @@ mod tests {
 
             let result = run_codex_review_gate_hook(temp.path(), &input).unwrap();
             assert_eq!(
-                result["hookSpecificOutput"]["for PreToolUse"]["hookEventName"],
+                result["hookSpecificOutput"]["hookEventName"],
                 "PreToolUse"
             );
-            assert!(result["hookSpecificOutput"]["for PreToolUse"]
+            assert!(result["hookSpecificOutput"]
                 .get("permissionDecision")
                 .is_none());
         }
