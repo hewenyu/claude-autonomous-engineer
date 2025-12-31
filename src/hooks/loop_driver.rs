@@ -390,7 +390,8 @@ fn auto_transition_state(
         .filter_map(|e| e.get("command").and_then(|c| c.as_str()))
         .any(|cmd| is_test_command(cmd));
 
-    let recent_test_activity = recent_test_activity || has_recent_test_activity_from_memory(&memory);
+    let recent_test_activity =
+        recent_test_activity || has_recent_test_activity_from_memory(&memory);
 
     if recent_test_activity && current_state.state_id == StateId::Coding {
         eprintln!("🧪 Test execution detected - transitioning to TESTING state");
@@ -404,7 +405,11 @@ fn auto_transition_state(
     Ok(())
 }
 
-fn update_memory_for_loop(project_root: &Path, roadmap: &RoadmapStatus, stuck: &StuckStatus) -> Result<()> {
+fn update_memory_for_loop(
+    project_root: &Path,
+    roadmap: &RoadmapStatus,
+    stuck: &StuckStatus,
+) -> Result<()> {
     let memory_file = project_root.join(".claude/status/memory.json");
     let mut memory: Memory = read_json(&memory_file).unwrap_or_default();
 

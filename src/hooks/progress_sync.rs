@@ -101,8 +101,8 @@ fn record_modified_file(project_root: &Path, file_path: &Path) -> Result<()> {
         // Prevent unbounded growth
         if memory.working_context.modified_files.len() > 50 {
             let start = memory.working_context.modified_files.len() - 50;
-            memory.working_context.modified_files = memory.working_context.modified_files[start..]
-                .to_vec();
+            memory.working_context.modified_files =
+                memory.working_context.modified_files[start..].to_vec();
         }
     }
 
@@ -159,9 +159,11 @@ mod tests {
 
         record_modified_file(temp.path(), Path::new("src/lib.rs")).unwrap();
 
-        let mem: Memory =
-            read_json(&temp.path().join(".claude/status/memory.json")).unwrap();
-        assert_eq!(mem.working_context.current_file, Some("src/lib.rs".to_string()));
+        let mem: Memory = read_json(&temp.path().join(".claude/status/memory.json")).unwrap();
+        assert_eq!(
+            mem.working_context.current_file,
+            Some("src/lib.rs".to_string())
+        );
         assert!(mem
             .working_context
             .modified_files

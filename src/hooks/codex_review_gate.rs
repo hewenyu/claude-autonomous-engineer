@@ -98,7 +98,10 @@ pub fn run_codex_review_gate_hook(project_root: &Path, input: &Value) -> Result<
     let review_result = if requires_deep_review {
         // 深度审查模式（只在关键转换时启用）
         let transition_type = transition_type.as_ref().expect("checked above");
-        eprintln!("   ⚠️  Critical State Transition Detected: {:?}", transition_type);
+        eprintln!(
+            "   ⚠️  Critical State Transition Detected: {:?}",
+            transition_type
+        );
 
         let previous_snapshot = state_tracker
             .get_previous_snapshot(current_task.id.as_ref().unwrap())

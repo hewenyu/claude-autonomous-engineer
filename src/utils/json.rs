@@ -27,7 +27,8 @@ where
     let json = serde_json::to_string_pretty(data).context("Failed to serialize to JSON")?;
 
     // Use atomic write to avoid corrupting state files (e.g. memory.json) during long-running loops.
-    write_file(path, &json).with_context(|| format!("Failed to write JSON file: {}", path.display()))
+    write_file(path, &json)
+        .with_context(|| format!("Failed to write JSON file: {}", path.display()))
 }
 
 /// 读取 JSON 文件，失败时返回默认值

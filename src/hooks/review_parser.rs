@@ -102,7 +102,9 @@ pub fn parse_review_output(output: &str, mode: ReviewMode) -> Result<ReviewResul
             state_transition_valid = captures[1].to_uppercase() == "YES";
         } else {
             // 兼容 Codex/模型输出缺少该字段：不阻塞提交，但给出提示
-            eprintln!("⚠️  Warning: No STATE_TRANSITION_VALID found in deep review output (assuming YES)");
+            eprintln!(
+                "⚠️  Warning: No STATE_TRANSITION_VALID found in deep review output (assuming YES)"
+            );
             issues.push(Issue {
                 severity: Severity::Warn,
                 description: "Missing STATE_TRANSITION_VALID in deep review output; assumed YES"

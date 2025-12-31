@@ -285,10 +285,10 @@ fn update_memory_on_command_failure(memory: &mut Memory, failure: &FailureInfo) 
                 .session
                 .extra
                 .insert("last_test_at".to_string(), json!(Utc::now().to_rfc3339()));
-            memory.session.extra.insert(
-                "last_test_outcome".to_string(),
-                json!(failure.kind),
-            );
+            memory
+                .session
+                .extra
+                .insert("last_test_outcome".to_string(), json!(failure.kind));
         }
     }
 }
@@ -459,7 +459,10 @@ mod tests {
         let mut mem = Memory::default();
         update_memory_on_command_success(&mut mem, "cargo test -q");
         assert_eq!(
-            mem.session.extra.get("last_test_outcome").and_then(|v| v.as_str()),
+            mem.session
+                .extra
+                .get("last_test_outcome")
+                .and_then(|v| v.as_str()),
             Some("success")
         );
     }
