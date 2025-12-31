@@ -58,7 +58,7 @@ impl StateId {
     }
 
     /// 从字符串解析
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "idle" => Some(StateId::Idle),
             "planning" => Some(StateId::Planning),
@@ -88,6 +88,14 @@ impl StateId {
 impl std::fmt::Display for StateId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.as_str())
+    }
+}
+
+impl std::str::FromStr for StateId {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        StateId::parse(s).ok_or(())
     }
 }
 
@@ -175,7 +183,7 @@ impl StateSnapshot {
         // parts[2] = state_id
         // parts[3..] = task_id (可能包含连字符)
 
-        let state_id = StateId::from_str(parts[2])?;
+        let state_id = StateId::parse(parts[2])?;
 
         let task_id = if parts.len() > 3 && parts[3] != "none" {
             Some(parts[3..].join("-"))
@@ -204,9 +212,9 @@ mod tests {
     #[test]
     fn test_state_id_conversion() {
         assert_eq!(StateId::Planning.as_str(), "planning");
-        assert_eq!(StateId::from_str("coding"), Some(StateId::Coding));
-        assert_eq!(StateId::from_str("COMPLETED"), Some(StateId::Completed));
-        assert_eq!(StateId::from_str("invalid"), None);
+        assert_eq!(StateId::parse("coding"), Some(StateId::Coding));
+        assert_eq!(StateId::parse("COMPLETED"), Some(StateId::Completed));
+        assert_eq!(StateId::parse("invalid"), None);
     }
 
     #[test]

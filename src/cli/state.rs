@@ -140,7 +140,7 @@ pub fn transition_to(state_str: &str, task_id: Option<&str>) -> Result<()> {
 
     // 解析目标状态
     let target_state =
-        StateId::from_str(state_str).context(format!("Invalid state: {}", state_str))?;
+        StateId::parse(state_str).context(format!("Invalid state: {}", state_str))?;
 
     // 获取当前状态
     let current_state = state_machine.current_state()?;
