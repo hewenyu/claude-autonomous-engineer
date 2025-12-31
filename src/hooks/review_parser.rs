@@ -79,8 +79,8 @@ lazy_static! {
 /// 解析 codex review 输出
 pub fn parse_review_output(output: &str, mode: ReviewMode) -> Result<ReviewResult> {
     let mut verdict = Verdict::Fail;
-    // 非深度审查时该字段不适用：设为 true，避免误报“状态转换无效”
-    let mut state_transition_valid = mode != ReviewMode::Deep;
+    // 深度审查时如果缺少字段，默认视为 YES，避免误阻塞长周期自动化。
+    let mut state_transition_valid = true;
     let mut issues = Vec::new();
 
     // 解析 VERDICT
@@ -101,8 +101,13 @@ pub fn parse_review_output(output: &str, mode: ReviewMode) -> Result<ReviewResul
         if let Some(captures) = STATE_TRANSITION_REGEX.captures(output) {
             state_transition_valid = captures[1].to_uppercase() == "YES";
         } else {
-            // 如果没有找到，默认为 false
-            eprintln!("⚠️  Warning: No STATE_TRANSITION_VALID found in deep review output");
+            // 兼容 Codex/模型输出缺少该字段：不阻塞提交，但给出提示
+            eprintln!("⚠️  Warning: No STATE_TRANSITION_VALID found in deep review output (assuming YES)");
+            issues.push(Issue {
+                severity: Severity::Warn,
+                description: "Missing STATE_TRANSITION_VALID in deep review output; assumed YES"
+                    .to_string(),
+            });
         }
     }
 

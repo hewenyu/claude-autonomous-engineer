@@ -5,6 +5,8 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
 
+use crate::utils::write_file;
+
 /// 读取 JSON 文件
 pub fn read_json<T>(path: &Path) -> Result<T>
 where
@@ -22,15 +24,10 @@ pub fn write_json<T>(path: &Path, data: &T) -> Result<()>
 where
     T: Serialize,
 {
-    // 确保父目录存在
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .with_context(|| format!("Failed to create directory: {}", parent.display()))?;
-    }
-
     let json = serde_json::to_string_pretty(data).context("Failed to serialize to JSON")?;
 
-    fs::write(path, json).with_context(|| format!("Failed to write JSON file: {}", path.display()))
+    // Use atomic write to avoid corrupting state files (e.g. memory.json) during long-running loops.
+    write_file(path, &json).with_context(|| format!("Failed to write JSON file: {}", path.display()))
 }
 
 /// 读取 JSON 文件，失败时返回默认值

@@ -21,7 +21,7 @@ pub fn run_error_tracker_hook(project_root: &Path, input: &Value) -> Result<Valu
         ExecutionOutcome::Success { command } => {
             // Best-effort: if a command succeeds, mark matching unresolved errors as resolved.
             let memory_file = project_root.join(".claude/status/memory.json");
-            let memory: Memory = read_json(&memory_file).unwrap_or_default();
+            let mut memory: Memory = read_json(&memory_file).unwrap_or_default();
             let Some(task_id) = memory.current_task.id.clone() else {
                 return Ok(json!({
                     "status": "ok",
@@ -30,6 +30,11 @@ pub fn run_error_tracker_hook(project_root: &Path, input: &Value) -> Result<Valu
             };
 
             let resolved = resolve_matching_errors(project_root, &task_id, &command)?;
+
+            // Best-effort bookkeeping for long-running sessions
+            update_memory_on_command_success(&mut memory, &command);
+            let _ = write_json(&memory_file, &memory);
+
             if resolved > 0 {
                 Ok(json!({
                     "status": "ok",
@@ -74,8 +79,10 @@ pub fn run_error_tracker_hook(project_root: &Path, input: &Value) -> Result<Valu
             if memory.current_task.id.is_some() && failure.increment_retry {
                 memory.current_task.retry_count = memory.current_task.retry_count.saturating_add(1);
                 memory.current_task.last_updated = Some(Utc::now().to_rfc3339());
-                let _ = write_json(&memory_file, &memory);
             }
+
+            update_memory_on_command_failure(&mut memory, &failure);
+            let _ = write_json(&memory_file, &memory);
 
             Ok(json!({
                 "status": "ok",
@@ -181,14 +188,7 @@ fn classify_failure_kind(command: &str, message: &str) -> &'static str {
     let cmd = command.to_lowercase();
     let msg = message;
 
-    let is_test_cmd = cmd.contains("pytest")
-        || cmd.contains("cargo test")
-        || cmd.contains("go test")
-        || cmd.contains("npm test")
-        || cmd.contains("pnpm test")
-        || cmd.contains("yarn test");
-
-    if !is_test_cmd {
+    if !is_test_command(&cmd) {
         return "command_failure";
     }
 
@@ -211,12 +211,86 @@ fn classify_failure_kind(command: &str, message: &str) -> &'static str {
     }
 }
 
+fn is_test_command(command_lower: &str) -> bool {
+    command_lower.contains("pytest")
+        || command_lower.contains("cargo test")
+        || command_lower.contains("go test")
+        || command_lower.contains("npm test")
+        || command_lower.contains("pnpm test")
+        || command_lower.contains("yarn test")
+}
+
 fn extract_text_field(root: &Value, path: &[&str]) -> Option<String> {
     let mut cur = root;
     for key in path {
         cur = cur.get(*key)?;
     }
     cur.as_str().map(|s| s.to_string())
+}
+
+fn update_memory_on_command_success(memory: &mut Memory, command: &str) {
+    let now = Utc::now().to_rfc3339();
+    memory.last_updated = Some(now.clone());
+
+    memory
+        .session
+        .extra
+        .insert("last_command".to_string(), json!(command));
+    memory
+        .session
+        .extra
+        .insert("last_command_at".to_string(), json!(now));
+
+    // Track test activity explicitly so other components (e.g. state machine) can infer Testing.
+    if is_test_command(&command.to_lowercase()) {
+        memory
+            .session
+            .extra
+            .insert("last_test_command".to_string(), json!(command));
+        memory
+            .session
+            .extra
+            .insert("last_test_at".to_string(), json!(Utc::now().to_rfc3339()));
+        memory
+            .session
+            .extra
+            .insert("last_test_outcome".to_string(), json!("success"));
+    }
+}
+
+fn update_memory_on_command_failure(memory: &mut Memory, failure: &FailureInfo) {
+    let now = Utc::now().to_rfc3339();
+    memory.last_updated = Some(now.clone());
+
+    memory.error_state.last_error = Some(failure.message.clone());
+    memory.error_state.last_error_at = Some(now);
+    memory.error_state.error_count = memory.error_state.error_count.saturating_add(1);
+
+    if let Some(cmd) = &failure.command {
+        memory
+            .session
+            .extra
+            .insert("last_command".to_string(), json!(cmd));
+        memory.session.extra.insert(
+            "last_command_at".to_string(),
+            json!(Utc::now().to_rfc3339()),
+        );
+
+        if is_test_command(&cmd.to_lowercase()) {
+            memory
+                .session
+                .extra
+                .insert("last_test_command".to_string(), json!(cmd));
+            memory
+                .session
+                .extra
+                .insert("last_test_at".to_string(), json!(Utc::now().to_rfc3339()));
+            memory.session.extra.insert(
+                "last_test_outcome".to_string(),
+                json!(failure.kind),
+            );
+        }
+    }
 }
 
 fn clamp_to_char_boundary(s: &str, mut idx: usize) -> usize {
@@ -378,5 +452,15 @@ mod tests {
         let s = "中文🙂".repeat(100);
         let t = truncate_for_log(&s, 10);
         assert!(t.contains("truncated"));
+    }
+
+    #[test]
+    fn test_update_memory_records_test_success() {
+        let mut mem = Memory::default();
+        update_memory_on_command_success(&mut mem, "cargo test -q");
+        assert_eq!(
+            mem.session.extra.get("last_test_outcome").and_then(|v| v.as_str()),
+            Some("success")
+        );
     }
 }
