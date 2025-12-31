@@ -17,9 +17,15 @@ pub fn run_inject_state_hook(project_root: &Path) -> Result<Value> {
 
     Ok(json!({
         "hookSpecificOutput": {
+            "for PreToolUse": {
+                "hookEventName": "PreToolUse"
+            },
             "for UserPromptSubmit": {
                 "hookEventName": "UserPromptSubmit",
                 "additionalContext": full_context
+            },
+            "for PostToolUse": {
+                "hookEventName": "PostToolUse"
             }
         }
     }))
