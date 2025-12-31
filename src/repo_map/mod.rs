@@ -106,9 +106,11 @@ impl RepoMapper {
         use ignore::WalkBuilder;
         use rayon::prelude::*;
 
+        // Respect `.gitignore` (and related git ignore sources) during scanning.
+        // Also apply git ignore rules even when the directory isn't a git repo.
         let walker = WalkBuilder::new(&self.project_root)
-            .hidden(false)
-            .git_ignore(true)
+            .standard_filters(true)
+            .require_git(false)
             .build();
 
         let mut files: Vec<PathBuf> = walker
@@ -190,5 +192,36 @@ impl RepoMapper {
             _ => anyhow::bail!("Unsupported language: {}", ext),
         }
         .to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    #[test]
+    fn respects_gitignore_when_scanning() {
+        let temp = TempDir::new().unwrap();
+
+        // A repo map doesn't require `.claude/` to exist.
+        std::fs::write(temp.path().join(".gitignore"), "ignored.rs\n").unwrap();
+
+        std::fs::write(
+            temp.path().join("included.rs"),
+            "pub fn included() -> i32 { 1 }\n",
+        )
+        .unwrap();
+        std::fs::write(
+            temp.path().join("ignored.rs"),
+            "pub fn ignored() -> i32 { 2 }\n",
+        )
+        .unwrap();
+
+        let mut mapper = RepoMapper::new(temp.path()).unwrap();
+        let out = mapper.generate_map_with_format(OutputFormat::Toon).unwrap();
+
+        assert!(out.contains("included.rs"));
+        assert!(!out.contains("ignored.rs"));
     }
 }
