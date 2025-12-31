@@ -129,7 +129,8 @@ pub fn sync_from_roadmap(project_root: &Path, roadmap_path: &Path) -> Result<boo
                 let next_phase_num = phase_num + 1;
 
                 // 检查 ROADMAP.md 中是否有下一个 phase 的占位符（TBD 或 Pending）
-                let has_next_phase_placeholder = content.contains(&format!("Phase {}", next_phase_num))
+                let has_next_phase_placeholder = content
+                    .contains(&format!("Phase {}", next_phase_num))
                     || content.contains("| 2 |") && phase_num == 1
                     || content.contains("TBD")
                     || content.contains("Phase 2: TBD");
@@ -139,10 +140,22 @@ pub fn sync_from_roadmap(project_root: &Path, roadmap_path: &Path) -> Result<boo
                     memory.current_task.id = None;
                     memory.current_task.status = "PHASE_COMPLETED".to_string();
                     memory.next_action.action = "PLAN_PHASE".to_string();
-                    memory.next_action.target = Some(format!("Run project-architect-supervisor for Phase {}", next_phase_num));
-                    memory.next_action.reason = Some(format!("Phase {} completed, plan Phase {}", phase_num, next_phase_num));
+                    memory.next_action.target = Some(format!(
+                        "Run project-architect-supervisor for Phase {}",
+                        next_phase_num
+                    ));
+                    memory.next_action.reason = Some(format!(
+                        "Phase {} completed, plan Phase {}",
+                        phase_num, next_phase_num
+                    ));
 
-                    log_decision(project_root, &format!("SYNC: Phase {} completed, ready to plan Phase {}", phase_num, next_phase_num))?;
+                    log_decision(
+                        project_root,
+                        &format!(
+                            "SYNC: Phase {} completed, ready to plan Phase {}",
+                            phase_num, next_phase_num
+                        ),
+                    )?;
 
                     // 写回并返回
                     write_json(&memory_path, &memory)?;
