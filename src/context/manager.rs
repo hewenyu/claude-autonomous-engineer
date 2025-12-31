@@ -221,8 +221,7 @@ impl ContextManager {
         let done = data.completed.len() + data.skipped.len();
         ctx.push_str(&format!(
             "\n**Progress**: {}/{} tasks done (completed + skipped)\n",
-            done,
-            data.total
+            done, data.total
         ));
 
         // 进行中

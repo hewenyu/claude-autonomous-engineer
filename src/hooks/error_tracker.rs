@@ -81,7 +81,11 @@ fn extract_failure(input: &Value) -> Option<FailureInfo> {
     let exit_code = input
         .pointer("/tool_output/exit_code")
         .and_then(|v| v.as_i64())
-        .or_else(|| input.pointer("/tool_result/exit_code").and_then(|v| v.as_i64()))
+        .or_else(|| {
+            input
+                .pointer("/tool_result/exit_code")
+                .and_then(|v| v.as_i64())
+        })
         .or_else(|| input.pointer("/tool_output/code").and_then(|v| v.as_i64()))
         .or_else(|| input.pointer("/tool_result/code").and_then(|v| v.as_i64()))
         .or_else(|| input.get("exit_code").and_then(|v| v.as_i64()));
@@ -89,7 +93,11 @@ fn extract_failure(input: &Value) -> Option<FailureInfo> {
     let success = input
         .pointer("/tool_output/success")
         .and_then(|v| v.as_bool())
-        .or_else(|| input.pointer("/tool_result/success").and_then(|v| v.as_bool()))
+        .or_else(|| {
+            input
+                .pointer("/tool_result/success")
+                .and_then(|v| v.as_bool())
+        })
         .or_else(|| exit_code.map(|c| c == 0));
 
     if success == Some(true) {
@@ -233,4 +241,3 @@ mod tests {
         assert_eq!(errors[0]["task"], "TASK-001");
     }
 }
-

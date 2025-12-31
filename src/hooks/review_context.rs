@@ -7,8 +7,8 @@ use crate::state::CurrentTask;
 use crate::utils::try_read_file;
 use anyhow::Result;
 use std::path::Path;
-use std::process::Command;
 use std::path::PathBuf;
+use std::process::Command;
 
 /// 审查模式
 #[derive(Debug, Clone, PartialEq, Eq)]
