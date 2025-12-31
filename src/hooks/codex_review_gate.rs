@@ -64,6 +64,11 @@ pub fn run_codex_review_gate_hook(project_root: &Path, input: &Value) -> Result<
     // 加载状态追踪器
     let mut state_tracker = TaskStateTracker::load(project_root)?;
 
+    // 如果这是该任务的首次提交，需要先落一份快照，否则后续永远检测不到转换
+    let task_id = current_task.id.as_deref().unwrap_or("");
+    let has_snapshot =
+        !task_id.is_empty() && state_tracker.get_previous_snapshot(task_id).is_some();
+
     // 检测状态转换
     let is_transition = state_tracker.detect_transition(current_task);
 
@@ -109,8 +114,8 @@ pub fn run_codex_review_gate_hook(project_root: &Path, input: &Value) -> Result<
 
                     println!("   ✅ Review PASSED");
 
-                    // 更新状态快照
-                    if is_transition {
+                    // 更新状态快照：状态转换时更新；首次看到任务也要初始化一份
+                    if is_transition || !has_snapshot {
                         state_tracker.update_snapshot(current_task)?;
                         println!("   💾 State snapshot updated");
                     }
@@ -126,6 +131,10 @@ pub fn run_codex_review_gate_hook(project_root: &Path, input: &Value) -> Result<
                         println!("      [WARN] {}", issue.description);
                     }
                     // 警告不阻塞提交
+                    if !has_snapshot {
+                        state_tracker.update_snapshot(current_task)?;
+                        println!("   💾 State snapshot updated");
+                    }
                     Ok(json!({
                         "decision": "allow",
                         "reason": "Code review passed with warnings"
@@ -165,7 +174,7 @@ fn extract_command(input: &Value) -> String {
 
 /// 检查是否是提交命令
 fn is_commit_command(command: &str) -> bool {
-    command.contains("git commit") || command.contains("git push")
+    command.contains("git commit")
 }
 
 #[cfg(test)]
@@ -189,7 +198,7 @@ mod tests {
     #[test]
     fn test_is_commit_command() {
         assert!(is_commit_command("git commit -m 'test'"));
-        assert!(is_commit_command("git push origin main"));
+        assert!(!is_commit_command("git push origin main"));
         assert!(!is_commit_command("git status"));
         assert!(!is_commit_command("npm install"));
     }

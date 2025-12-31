@@ -21,12 +21,7 @@ pub fn node_text<'a>(node: &Node, source: &'a str) -> &'a str {
 /// 查找指定类型的子节点
 pub fn find_child_by_kind<'a>(node: &'a Node, kind: &str) -> Option<Node<'a>> {
     let mut cursor = node.walk();
-    for child in node.children(&mut cursor) {
-        if child.kind() == kind {
-            return Some(child);
-        }
-    }
-    None
+    node.children(&mut cursor).find(|child| child.kind() == kind)
 }
 
 /// 提取所有指定类型的子节点
