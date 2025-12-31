@@ -109,10 +109,7 @@ mod tests {
         let input = json!({});
 
         let result = run_hook("progress_sync", temp.path(), Some(&input)).unwrap();
-        assert_eq!(
-            result["hookSpecificOutput"]["hookEventName"],
-            "PostToolUse"
-        );
+        assert_eq!(result["hookSpecificOutput"]["hookEventName"], "PostToolUse");
     }
 
     #[test]
@@ -125,10 +122,7 @@ mod tests {
         });
 
         let result = run_hook("codex_review_gate", temp.path(), Some(&input)).unwrap();
-        assert_eq!(
-            result["hookSpecificOutput"]["hookEventName"],
-            "PreToolUse"
-        );
+        assert_eq!(result["hookSpecificOutput"]["hookEventName"], "PreToolUse");
         assert!(result["hookSpecificOutput"]
             .get("permissionDecision")
             .is_none());
@@ -145,6 +139,9 @@ mod tests {
     fn test_run_hook_unknown() {
         let temp = TempDir::new().unwrap();
         let result = run_hook("unknown_hook", temp.path(), None).unwrap();
-        assert!(result["systemMessage"].as_str().unwrap_or("").contains("Unknown hook"));
+        assert!(result["systemMessage"]
+            .as_str()
+            .unwrap_or("")
+            .contains("Unknown hook"));
     }
 }

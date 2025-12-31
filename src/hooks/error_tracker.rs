@@ -463,10 +463,7 @@ mod tests {
         });
 
         let result = run_error_tracker_hook(temp.path(), &input).unwrap();
-        assert_eq!(
-            result["hookSpecificOutput"]["hookEventName"],
-            "PostToolUse"
-        );
+        assert_eq!(result["hookSpecificOutput"]["hookEventName"], "PostToolUse");
 
         let errors: Vec<Value> =
             read_json(&temp.path().join(".claude/status/error_history.json")).unwrap();
@@ -496,10 +493,7 @@ mod tests {
             "tool_output": { "exit_code": 0, "stdout": "Finished" }
         });
         let result = run_error_tracker_hook(temp.path(), &success_input).unwrap();
-        assert_eq!(
-            result["hookSpecificOutput"]["hookEventName"],
-            "PostToolUse"
-        );
+        assert_eq!(result["hookSpecificOutput"]["hookEventName"], "PostToolUse");
 
         let errors: Vec<Value> =
             read_json(&temp.path().join(".claude/status/error_history.json")).unwrap();

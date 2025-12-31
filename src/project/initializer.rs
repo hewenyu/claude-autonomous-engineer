@@ -45,16 +45,16 @@ pub fn init_project(project_root: &Path, name: Option<&str>, force: bool) -> Res
     );
     println!("\nNext steps:");
     println!(
-        "  1. Edit {} to add project instructions",
-        "CLAUDE.md".cyan()
-    );
-    println!(
-        "  2. Review {} for hook configuration",
+        "  1. Review {} for hook configuration",
         ".claude/settings.json".cyan()
     );
     println!(
-        "  3. Create {} to define your project roadmap",
+        "  2. Edit {} to define your project roadmap",
         ".claude/status/ROADMAP.md".cyan()
+    );
+    println!(
+        "  3. Start Claude Code - {} hook will auto-inject the protocol",
+        "claude_protocol".cyan()
     );
 
     Ok(())
@@ -100,12 +100,6 @@ fn write_agent_files(project_root: &Path) -> Result<()> {
 /// 写入模板文件
 fn write_template_files(project_root: &Path, name: Option<&str>) -> Result<()> {
     println!("\n📝 Writing configuration files...");
-
-    // CLAUDE.md (项目根目录)
-    let claude_md = TemplateAssets::get_claude_md()?;
-    let claude_path = project_root.join("CLAUDE.md");
-    fs::write(&claude_path, claude_md)?;
-    println!("  ✓ {}", "CLAUDE.md".cyan());
 
     // settings.json
     let mut settings_json = TemplateAssets::get_settings_json()?;
@@ -236,7 +230,6 @@ mod tests {
         assert!(temp.path().join(".claude/phases").exists());
 
         // 验证文件
-        assert!(temp.path().join("CLAUDE.md").exists());
         assert!(temp.path().join(".claude/settings.json").exists());
         assert!(temp.path().join(".claude/status/memory.json").exists());
         assert!(temp.path().join(".claude/status/ROADMAP.md").exists());

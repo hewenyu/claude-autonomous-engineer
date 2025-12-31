@@ -33,7 +33,10 @@ mod tests {
         let result = run_claude_protocol_hook().unwrap();
 
         // 验证输出格式
-        assert_eq!(result["hookSpecificOutput"]["hookEventName"], "SessionStart");
+        assert_eq!(
+            result["hookSpecificOutput"]["hookEventName"],
+            "SessionStart"
+        );
         assert!(result["hookSpecificOutput"]["additionalContext"].is_string());
 
         // 验证包含关键内容

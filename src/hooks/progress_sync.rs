@@ -124,10 +124,7 @@ mod tests {
         let input = json!({});
 
         let result = run_progress_sync_hook(temp.path(), &input).unwrap();
-        assert_eq!(
-            result["hookSpecificOutput"]["hookEventName"],
-            "PostToolUse"
-        );
+        assert_eq!(result["hookSpecificOutput"]["hookEventName"], "PostToolUse");
     }
 
     #[test]

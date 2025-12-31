@@ -35,7 +35,10 @@ mod tests {
         fs::create_dir_all(temp.path().join(".claude/status")).unwrap();
 
         let result = run_inject_state_hook(temp.path()).unwrap();
-        assert_eq!(result["hookSpecificOutput"]["hookEventName"], "UserPromptSubmit");
+        assert_eq!(
+            result["hookSpecificOutput"]["hookEventName"],
+            "UserPromptSubmit"
+        );
         assert!(result["hookSpecificOutput"]["additionalContext"].is_string());
 
         let context = result["hookSpecificOutput"]["additionalContext"]

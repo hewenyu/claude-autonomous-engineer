@@ -215,10 +215,7 @@ mod tests {
         });
 
         let result = run_codex_review_gate_hook(temp.path(), &input).unwrap();
-        assert_eq!(
-            result["hookSpecificOutput"]["hookEventName"],
-            "PreToolUse"
-        );
+        assert_eq!(result["hookSpecificOutput"]["hookEventName"], "PreToolUse");
         assert!(result["hookSpecificOutput"]
             .get("permissionDecision")
             .is_none());
@@ -334,10 +331,7 @@ mod tests {
             });
 
             let result = run_codex_review_gate_hook(temp.path(), &input).unwrap();
-            assert_eq!(
-                result["hookSpecificOutput"]["permissionDecision"],
-                "deny"
-            );
+            assert_eq!(result["hookSpecificOutput"]["permissionDecision"], "deny");
             assert!(result["hookSpecificOutput"]["permissionDecisionReason"]
                 .as_str()
                 .unwrap()
@@ -371,10 +365,7 @@ mod tests {
             });
 
             let result = run_codex_review_gate_hook(temp.path(), &input).unwrap();
-            assert_eq!(
-                result["hookSpecificOutput"]["hookEventName"],
-                "PreToolUse"
-            );
+            assert_eq!(result["hookSpecificOutput"]["hookEventName"], "PreToolUse");
             assert!(result["hookSpecificOutput"]
                 .get("permissionDecision")
                 .is_none());
