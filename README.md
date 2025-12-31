@@ -84,6 +84,25 @@ Claude: "这个任务完成了"
   - 没有 → "所有任务完成！"
 ```
 
+## 📝 最近改进 (v1.0.9)
+
+### Bug 修复
+
+**修复 loop_driver 误判空 ROADMAP 为"已完成"的问题**
+
+在之前的版本中，当 ROADMAP 存在但为空（total=0，即还未生成任务）时，`loop_driver` hook 会误判为"所有任务已完成"，导致在规划阶段就触发 Stop 事件，阻止继续工作。
+
+**修复内容**：
+- 新增检查：ROADMAP 为空时返回 "ROADMAP EMPTY" 错误，提示需要先生成任务
+- 调整判断顺序：先检查 `total == 0`，再检查 `complete`
+- 确保只有在真正完成所有任务时才允许停止
+
+**影响**：
+- 修复前：空 ROADMAP → "✓ 所有任务完成" → 意外停止
+- 修复后：空 ROADMAP → "❌ ROADMAP 为空，请生成任务" → 正确提示
+
+这个修复确保了 `project-architect-supervisor` 能够正常完成任务规划阶段，不会被提前中断。
+
 ## 📦 安装
 
 ### 方式 1: Cargo Install（推荐）
@@ -95,22 +114,22 @@ cargo install claude-autonomous
 ### 方式 2: DEB 包（Debian/Ubuntu）
 
 ```bash
-wget https://github.com/hewenyu/claude-autonomous-engineer/releases/latest/download/claude-autonomous_1.0.2_amd64.deb
-sudo dpkg -i claude-autonomous_1.0.2_amd64.deb
+wget https://github.com/hewenyu/claude-autonomous-engineer/releases/latest/download/claude-autonomous_1.0.9_amd64.deb
+sudo dpkg -i claude-autonomous_1.0.9_amd64.deb
 ```
 
 ### 方式 3: RPM 包（Fedora/RHEL/CentOS）
 
 ```bash
-wget https://github.com/hewenyu/claude-autonomous-engineer/releases/latest/download/claude-autonomous-1.0.2-1.x86_64.rpm
-sudo rpm -i claude-autonomous-1.0.2-1.x86_64.rpm
+wget https://github.com/hewenyu/claude-autonomous-engineer/releases/latest/download/claude-autonomous-1.0.9-1.x86_64.rpm
+sudo rpm -i claude-autonomous-1.0.9-1.x86_64.rpm
 ```
 
 ### 验证安装
 
 ```bash
 claude-autonomous --version
-# claude-autonomous 1.0.2
+# claude-autonomous 1.0.9
 ```
 
 ## 🚀 快速开始
@@ -128,7 +147,6 @@ claude-autonomous init --name "My Awesome Project"
 
 ```
 my-project/
-├── CLAUDE.md                          # 项目指令（告诉 Claude 如何工作）
 └── .claude/
     ├── settings.json                  # Hook 配置
     ├── agents/                        # 5 个 agent 定义
@@ -367,6 +385,13 @@ Claude: "TASK-003: 添加集成测试..."
 │                  监听文件修改:                                     │
 │                  • ROADMAP.md → 同步进度                          │
 │                  • TASK-xxx.md → 同步当前任务                     │
+│                                                                  │
+│  Bash 命令执行 → [error_tracker] → 记录失败命令                   │
+│                     ↓                                            │
+│                  失败时自动:                                       │
+│                  • 记录到 error_history.json                      │
+│                  • 递增 retry_count                               │
+│                  • 供 Claude 参考避免重复                         │
 │                                                                  │
 │  git commit → [codex_review_gate] → 审查 → PASS/FAIL            │
 │                     ↓                                            │

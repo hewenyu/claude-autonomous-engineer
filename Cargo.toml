@@ -78,7 +78,7 @@ Claude Autonomous Engineering CLI - A pure Rust implementation of autonomous \
 engineering toolkit with zero Python dependencies.
 
 Features:
-- 4 embedded hooks (inject_state, progress_sync, codex_review_gate, loop_driver)
+- 6 embedded hooks (claude_protocol, inject_state, progress_sync, error_tracker, codex_review_gate, loop_driver)
 - 5 pre-installed agents (project-architect, codex-reviewer, code-executor, etc.)
 - Smart context management (80K/40K/30K token budgets)
 - Automatic state synchronization from ROADMAP.md to memory.json
