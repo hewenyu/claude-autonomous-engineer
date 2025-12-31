@@ -11,6 +11,10 @@ use std::path::Path;
 use crate::state::Memory;
 use crate::utils::{read_json, write_json};
 
+const CONSECUTIVE_TEST_FAILURES_KEY: &str = "consecutive_test_failures";
+const REPEAT_TEST_FAILURES_KEY: &str = "repeat_test_failure_count";
+const LAST_TEST_FAILURE_SIG_KEY: &str = "last_test_failure_signature";
+
 /// Run error_tracker hook
 pub fn run_error_tracker_hook(project_root: &Path, input: &Value) -> Result<Value> {
     match extract_outcome(input) {
@@ -255,6 +259,20 @@ fn update_memory_on_command_success(memory: &mut Memory, command: &str) {
             .session
             .extra
             .insert("last_test_outcome".to_string(), json!("success"));
+
+        // Reset consecutive test failure counters on a successful test run.
+        memory
+            .session
+            .extra
+            .insert(CONSECUTIVE_TEST_FAILURES_KEY.to_string(), json!(0));
+        memory
+            .session
+            .extra
+            .insert(REPEAT_TEST_FAILURES_KEY.to_string(), json!(0));
+        memory
+            .session
+            .extra
+            .remove(LAST_TEST_FAILURE_SIG_KEY);
     }
 }
 
@@ -289,6 +307,59 @@ fn update_memory_on_command_failure(memory: &mut Memory, failure: &FailureInfo) 
                 .session
                 .extra
                 .insert("last_test_outcome".to_string(), json!(failure.kind));
+
+            // Track consecutive/duplicate test failures to avoid infinite loops.
+            if failure.kind == "test_failure" {
+                let signature = format!(
+                    "{}|{}",
+                    cmd,
+                    failure
+                        .message
+                        .lines()
+                        .next()
+                        .unwrap_or("test failure")
+                        .trim()
+                );
+                let signature = truncate_for_log(&signature, 500);
+
+                let consecutive = memory
+                    .session
+                    .extra
+                    .get(CONSECUTIVE_TEST_FAILURES_KEY)
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0)
+                    .saturating_add(1);
+                memory.session.extra.insert(
+                    CONSECUTIVE_TEST_FAILURES_KEY.to_string(),
+                    json!(consecutive),
+                );
+
+                let last_sig = memory
+                    .session
+                    .extra
+                    .get(LAST_TEST_FAILURE_SIG_KEY)
+                    .and_then(|v| v.as_str());
+                let repeat = if last_sig == Some(signature.as_str()) {
+                    memory
+                        .session
+                        .extra
+                        .get(REPEAT_TEST_FAILURES_KEY)
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0)
+                        .saturating_add(1)
+                } else {
+                    1
+                };
+
+                memory
+                    .session
+                    .extra
+                    .insert(REPEAT_TEST_FAILURES_KEY.to_string(), json!(repeat));
+                memory
+                    .session
+                    .extra
+                    .insert(LAST_TEST_FAILURE_SIG_KEY.to_string(), json!(signature));
+            }
         }
     }
 }
@@ -457,6 +528,15 @@ mod tests {
     #[test]
     fn test_update_memory_records_test_success() {
         let mut mem = Memory::default();
+        mem.session
+            .extra
+            .insert(CONSECUTIVE_TEST_FAILURES_KEY.to_string(), json!(3));
+        mem.session
+            .extra
+            .insert(REPEAT_TEST_FAILURES_KEY.to_string(), json!(2));
+        mem.session
+            .extra
+            .insert(LAST_TEST_FAILURE_SIG_KEY.to_string(), json!("sig"));
         update_memory_on_command_success(&mut mem, "cargo test -q");
         assert_eq!(
             mem.session
@@ -464,6 +544,71 @@ mod tests {
                 .get("last_test_outcome")
                 .and_then(|v| v.as_str()),
             Some("success")
+        );
+        assert_eq!(
+            mem.session
+                .extra
+                .get(CONSECUTIVE_TEST_FAILURES_KEY)
+                .and_then(|v| v.as_u64()),
+            Some(0)
+        );
+        assert_eq!(
+            mem.session
+                .extra
+                .get(REPEAT_TEST_FAILURES_KEY)
+                .and_then(|v| v.as_u64()),
+            Some(0)
+        );
+        assert!(!mem.session.extra.contains_key(LAST_TEST_FAILURE_SIG_KEY));
+    }
+
+    #[test]
+    fn test_run_error_tracker_tracks_consecutive_test_failures_and_resets() {
+        let temp = TempDir::new().unwrap();
+        std::fs::create_dir_all(temp.path().join(".claude/status")).unwrap();
+
+        std::fs::write(
+            temp.path().join(".claude/status/memory.json"),
+            r#"{ "current_task": { "id": "TASK-001", "status": "IN_PROGRESS", "retry_count": 0, "max_retries": 5 } }"#,
+        )
+        .unwrap();
+
+        let fail_input = json!({
+            "tool_input": { "command": "cargo test -q" },
+            "tool_output": { "exit_code": 101, "stderr": "thread 't' panicked at 'assertion failed'" }
+        });
+        run_error_tracker_hook(temp.path(), &fail_input).unwrap();
+        run_error_tracker_hook(temp.path(), &fail_input).unwrap();
+
+        let mem: Memory = read_json(&temp.path().join(".claude/status/memory.json")).unwrap();
+        assert_eq!(
+            mem.session
+                .extra
+                .get(CONSECUTIVE_TEST_FAILURES_KEY)
+                .and_then(|v| v.as_u64()),
+            Some(2)
+        );
+        assert_eq!(
+            mem.session
+                .extra
+                .get(REPEAT_TEST_FAILURES_KEY)
+                .and_then(|v| v.as_u64()),
+            Some(2)
+        );
+
+        let success_input = json!({
+            "tool_input": { "command": "cargo test -q" },
+            "tool_output": { "exit_code": 0, "stdout": "ok" }
+        });
+        run_error_tracker_hook(temp.path(), &success_input).unwrap();
+
+        let mem: Memory = read_json(&temp.path().join(".claude/status/memory.json")).unwrap();
+        assert_eq!(
+            mem.session
+                .extra
+                .get(CONSECUTIVE_TEST_FAILURES_KEY)
+                .and_then(|v| v.as_u64()),
+            Some(0)
         );
     }
 }

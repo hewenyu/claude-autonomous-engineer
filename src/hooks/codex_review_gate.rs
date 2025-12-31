@@ -164,11 +164,23 @@ pub fn run_codex_review_gate_hook(project_root: &Path, input: &Value) -> Result<
             }
         }
         Err(e) => {
-            // Codex 命令执行失败，记录错误但允许提交
-            eprintln!("   ⚠️  Codex review error: {}", e);
-            eprintln!("   ℹ️  Allowing commit (review disabled due to error)");
+            // Fail-closed: if Codex review cannot run, do not allow committing silently.
+            eprintln!("   ❌ Codex review error: {}", e);
 
-            Ok(noop_pretooluse_output())
+            Ok(deny_pretooluse(format!(
+                r#"❌ Codex review could not be executed, commit blocked.
+
+Error:
+{}
+
+Fix:
+1) Ensure `codex` is installed and available in PATH
+2) Re-run the commit after fixing the review tool
+
+If you intentionally want to bypass the gate, remove/disable the `claude-autonomous hook codex_review_gate`
+entry from `.claude/settings.json`."#,
+                e
+            )))
         }
     }
 }
@@ -226,5 +238,143 @@ mod tests {
         });
 
         assert_eq!(extract_command(&input), "git commit -m 'test'");
+    }
+
+    #[cfg(unix)]
+    mod commit_tests {
+        use super::*;
+        use std::fs;
+        use std::os::unix::fs::PermissionsExt;
+        use std::path::Path;
+        use std::process::Command;
+        use std::sync::{Mutex, OnceLock};
+
+        struct EnvGuard {
+            key: &'static str,
+            previous: Option<String>,
+        }
+
+        impl EnvGuard {
+            fn set(key: &'static str, value: String) -> Self {
+                let previous = std::env::var(key).ok();
+                std::env::set_var(key, value);
+                Self { key, previous }
+            }
+        }
+
+        impl Drop for EnvGuard {
+            fn drop(&mut self) {
+                if let Some(prev) = self.previous.take() {
+                    std::env::set_var(self.key, prev);
+                } else {
+                    std::env::remove_var(self.key);
+                }
+            }
+        }
+
+        fn write_executable(path: &Path, content: &str) {
+            fs::write(path, content).unwrap();
+            let mut perm = fs::metadata(path).unwrap().permissions();
+            perm.set_mode(0o755);
+            fs::set_permissions(path, perm).unwrap();
+        }
+
+        fn init_git_repo_with_staged_file(root: &Path) {
+            let status = Command::new("git")
+                .args(["init"])
+                .current_dir(root)
+                .status()
+                .unwrap();
+            assert!(status.success());
+
+            fs::write(root.join("file.txt"), "hello\n").unwrap();
+            let status = Command::new("git")
+                .args(["add", "file.txt"])
+                .current_dir(root)
+                .status()
+                .unwrap();
+            assert!(status.success());
+        }
+
+        fn write_minimal_memory(root: &Path) {
+            fs::create_dir_all(root.join(".claude/status")).unwrap();
+            fs::write(
+                root.join(".claude/status/memory.json"),
+                r#"{ "current_task": { "id": "TASK-001", "status": "IN_PROGRESS", "retry_count": 0, "max_retries": 5 } }"#,
+            )
+            .unwrap();
+        }
+
+        static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+
+        #[test]
+        fn test_commit_denied_when_codex_review_errors() {
+            let _lock = ENV_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap();
+
+            let temp = TempDir::new().unwrap();
+            init_git_repo_with_staged_file(temp.path());
+            write_minimal_memory(temp.path());
+
+            // Fake `codex` that fails.
+            let bin_dir = temp.path().join("bin");
+            fs::create_dir_all(&bin_dir).unwrap();
+            let codex_path = bin_dir.join("codex");
+            write_executable(
+                &codex_path,
+                "#!/bin/sh\n\necho \"boom\" 1>&2\nexit 1\n",
+            );
+
+            let _guard = EnvGuard::set(
+                "CLAUDE_AUTONOMOUS_CODEX_BIN",
+                codex_path.to_string_lossy().to_string(),
+            );
+
+            let input = json!({
+                "tool_input": { "command": "git commit -m 'x'" }
+            });
+
+            let result = run_codex_review_gate_hook(temp.path(), &input).unwrap();
+            assert_eq!(
+                result["hookSpecificOutput"]["permissionDecision"],
+                "deny"
+            );
+            assert!(result["hookSpecificOutput"]["permissionDecisionReason"]
+                .as_str()
+                .unwrap()
+                .contains("commit blocked"));
+        }
+
+        #[test]
+        fn test_commit_allowed_when_codex_review_passes() {
+            let _lock = ENV_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap();
+
+            let temp = TempDir::new().unwrap();
+            init_git_repo_with_staged_file(temp.path());
+            write_minimal_memory(temp.path());
+
+            // Fake `codex` that returns a PASS verdict.
+            let bin_dir = temp.path().join("bin");
+            fs::create_dir_all(&bin_dir).unwrap();
+            let codex_path = bin_dir.join("codex");
+            write_executable(
+                &codex_path,
+                "#!/bin/sh\n\ncat >/dev/null\n\necho \"VERDICT: PASS\"\necho \"ISSUES:\"\nexit 0\n",
+            );
+
+            let _guard = EnvGuard::set(
+                "CLAUDE_AUTONOMOUS_CODEX_BIN",
+                codex_path.to_string_lossy().to_string(),
+            );
+
+            let input = json!({
+                "tool_input": { "command": "git commit -m 'x'" }
+            });
+
+            let result = run_codex_review_gate_hook(temp.path(), &input).unwrap();
+            assert_eq!(result["hookSpecificOutput"]["hookEventName"], "PreToolUse");
+            assert!(result["hookSpecificOutput"]
+                .get("permissionDecision")
+                .is_none());
+        }
     }
 }

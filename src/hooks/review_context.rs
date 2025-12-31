@@ -21,6 +21,7 @@ pub enum ReviewMode {
 
 /// 审查上下文
 pub struct ReviewContext {
+    pub project_root: PathBuf,
     pub instruction: String,
     pub mode: ReviewMode,
 }
@@ -108,6 +109,7 @@ ISSUES:
         );
 
         Ok(ReviewContext {
+            project_root: project_root.to_path_buf(),
             instruction,
             mode: ReviewMode::Deep,
         })
@@ -153,6 +155,7 @@ ISSUES:
         );
 
         Ok(ReviewContext {
+            project_root: project_root.to_path_buf(),
             instruction,
             mode: ReviewMode::Regular,
         })

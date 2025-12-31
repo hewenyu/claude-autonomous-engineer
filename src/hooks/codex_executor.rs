@@ -18,9 +18,13 @@ pub fn execute_codex_review(context: &ReviewContext) -> Result<ReviewResult> {
 pub fn execute_codex_review_simple(context: &ReviewContext) -> Result<ReviewResult> {
     eprintln!("🤖 Invoking codex review...");
 
-    let mut child = Command::new("codex")
+    let codex_bin =
+        std::env::var("CLAUDE_AUTONOMOUS_CODEX_BIN").unwrap_or_else(|_| "codex".to_string());
+
+    let mut child = Command::new(codex_bin)
         .arg("review")
         .arg("--uncommitted")
+        .current_dir(&context.project_root)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -61,24 +65,4 @@ pub fn execute_codex_review_simple(context: &ReviewContext) -> Result<ReviewResu
 
     // 解析输出
     parse_review_output(&stdout, context.mode.clone())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::hooks::review_context::ReviewMode;
-
-    #[test]
-    #[ignore] // 需要 codex 命令才能运行
-    fn test_execute_codex_review() {
-        let context = ReviewContext {
-            instruction: "Test instruction".to_string(),
-            mode: ReviewMode::Regular,
-        };
-
-        // 这个测试需要 codex 命令
-        let result = execute_codex_review_simple(&context);
-        // 只检查是否能调用，不检查结果
-        assert!(result.is_ok() || result.is_err());
-    }
 }

@@ -15,6 +15,9 @@ use crate::utils::{read_json, try_read_file, write_json};
 const DEFAULT_MAX_RETRIES: u32 = 5;
 const MAX_CONSECUTIVE_ERRORS: usize = 10;
 const TEST_ACTIVITY_WINDOW_MINUTES: i64 = 5;
+const MAX_CONSECUTIVE_TEST_FAILURES: u64 = 12;
+const MAX_REPEAT_TEST_FAILURES: u64 = 6;
+const TEST_FAILURE_WINDOW: usize = 12;
 
 /// 运行 loop_driver hook
 ///
@@ -224,11 +227,85 @@ fn check_stuck(project_root: &Path) -> Result<StuckStatus> {
         });
     }
 
+    // Detect repeated test failures (avoid infinite loops during TDD).
+    let consecutive_test_failures = memory
+        .session
+        .extra
+        .get("consecutive_test_failures")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    let repeat_test_failures = memory
+        .session
+        .extra
+        .get("repeat_test_failure_count")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+
+    if repeat_test_failures >= MAX_REPEAT_TEST_FAILURES {
+        return Ok(StuckStatus {
+            stuck: true,
+            reason: format!(
+                "Task {} hit {} repeated identical test failures",
+                task_id, repeat_test_failures
+            ),
+            suggestion: "Stop rerunning the same tests; inspect the failing test output and change approach".to_string(),
+        });
+    }
+
+    if consecutive_test_failures >= MAX_CONSECUTIVE_TEST_FAILURES {
+        return Ok(StuckStatus {
+            stuck: true,
+            reason: format!(
+                "Task {} has {} consecutive test failures",
+                task_id, consecutive_test_failures
+            ),
+            suggestion: "Isolate one failing test, fix root cause, or mark task blocked to avoid infinite loop".to_string(),
+        });
+    }
+
     // 检查错误历史
     let error_file = project_root.join(".claude/status/error_history.json");
     let errors: Vec<Value> = read_json(&error_file).unwrap_or_default();
 
     if !errors.is_empty() {
+        // Additional protection: if the last N errors are unresolved test failures for this task,
+        // assume we're looping without making progress.
+        let recent_test_failures_for_task = errors
+            .iter()
+            .rev()
+            .take(TEST_FAILURE_WINDOW)
+            .filter(|e| {
+                let kind = e
+                    .get("kind")
+                    .and_then(|k| k.as_str())
+                    .unwrap_or("command_failure");
+                if kind != "test_failure" {
+                    return false;
+                }
+                let unresolved = e.get("resolution").is_none() || e["resolution"].is_null();
+                if !unresolved {
+                    return false;
+                }
+                e.get("task")
+                    .and_then(|t| t.as_str())
+                    .map(|t| t == task_id)
+                    .unwrap_or(false)
+            })
+            .count();
+
+        if recent_test_failures_for_task >= TEST_FAILURE_WINDOW {
+            return Ok(StuckStatus {
+                stuck: true,
+                reason: format!(
+                    "Task {} has {} recent unresolved test failures",
+                    task_id, recent_test_failures_for_task
+                ),
+                suggestion:
+                    "Tests keep failing repeatedly; change strategy or mark task [!] to stop the loop"
+                        .to_string(),
+            });
+        }
+
         let task_errors: Vec<_> = errors
             .iter()
             .filter(|e| {
@@ -530,5 +607,36 @@ mod tests {
         assert!(is_test_command("cargo test -q"));
         assert!(is_test_command("pytest -q"));
         assert!(!is_test_command("cargo build"));
+    }
+
+    #[test]
+    fn test_loop_driver_stuck_on_consecutive_test_failures() {
+        let temp = TempDir::new().unwrap();
+        fs::create_dir_all(temp.path().join(".claude/status")).unwrap();
+
+        let roadmap = r#"
+# Roadmap
+- [>] TASK-001: In progress
+- [ ] TASK-002: Pending
+"#;
+        fs::write(temp.path().join(".claude/status/ROADMAP.md"), roadmap).unwrap();
+
+        fs::write(
+            temp.path().join(".claude/status/memory.json"),
+            r#"
+{
+  "current_task": { "id": "TASK-001", "status": "IN_PROGRESS", "retry_count": 0, "max_retries": 5 },
+  "session": { "consecutive_test_failures": 12 }
+}
+"#,
+        )
+        .unwrap();
+
+        let result = run_loop_driver_hook(temp.path()).unwrap();
+        assert_eq!(result["decision"], "block");
+        assert!(result["reason"]
+            .as_str()
+            .unwrap()
+            .contains("STUCK STATE DETECTED"));
     }
 }
