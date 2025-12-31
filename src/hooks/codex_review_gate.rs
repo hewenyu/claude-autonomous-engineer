@@ -319,10 +319,7 @@ mod tests {
             let bin_dir = temp.path().join("bin");
             fs::create_dir_all(&bin_dir).unwrap();
             let codex_path = bin_dir.join("codex");
-            write_executable(
-                &codex_path,
-                "#!/bin/sh\n\necho \"boom\" 1>&2\nexit 1\n",
-            );
+            write_executable(&codex_path, "#!/bin/sh\n\necho \"boom\" 1>&2\nexit 1\n");
 
             let _guard = EnvGuard::set(
                 "CLAUDE_AUTONOMOUS_CODEX_BIN",
@@ -334,10 +331,7 @@ mod tests {
             });
 
             let result = run_codex_review_gate_hook(temp.path(), &input).unwrap();
-            assert_eq!(
-                result["hookSpecificOutput"]["permissionDecision"],
-                "deny"
-            );
+            assert_eq!(result["hookSpecificOutput"]["permissionDecision"], "deny");
             assert!(result["hookSpecificOutput"]["permissionDecisionReason"]
                 .as_str()
                 .unwrap()

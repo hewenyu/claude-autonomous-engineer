@@ -248,7 +248,9 @@ fn check_stuck(project_root: &Path) -> Result<StuckStatus> {
                 "Task {} hit {} repeated identical test failures",
                 task_id, repeat_test_failures
             ),
-            suggestion: "Stop rerunning the same tests; inspect the failing test output and change approach".to_string(),
+            suggestion:
+                "Stop rerunning the same tests; inspect the failing test output and change approach"
+                    .to_string(),
         });
     }
 

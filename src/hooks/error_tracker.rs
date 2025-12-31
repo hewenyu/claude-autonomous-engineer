@@ -269,10 +269,7 @@ fn update_memory_on_command_success(memory: &mut Memory, command: &str) {
             .session
             .extra
             .insert(REPEAT_TEST_FAILURES_KEY.to_string(), json!(0));
-        memory
-            .session
-            .extra
-            .remove(LAST_TEST_FAILURE_SIG_KEY);
+        memory.session.extra.remove(LAST_TEST_FAILURE_SIG_KEY);
     }
 }
 

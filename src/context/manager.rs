@@ -283,7 +283,11 @@ impl ContextManager {
             return Ok(String::new());
         }
 
-        fn find_task_spec_file(dir: &std::path::Path, task_id: &str, depth_left: usize) -> Option<std::path::PathBuf> {
+        fn find_task_spec_file(
+            dir: &std::path::Path,
+            task_id: &str,
+            depth_left: usize,
+        ) -> Option<std::path::PathBuf> {
             if depth_left == 0 {
                 return None;
             }
@@ -729,7 +733,8 @@ mod tests {
         )
         .unwrap();
         std::fs::write(
-            temp.path().join(".claude/phases/phase-1_test/TASK-001_spec.md"),
+            temp.path()
+                .join(".claude/phases/phase-1_test/TASK-001_spec.md"),
             "# TASK-001: Example (phase)\n",
         )
         .unwrap();
