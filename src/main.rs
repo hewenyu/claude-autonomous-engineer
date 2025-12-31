@@ -53,13 +53,17 @@ enum Commands {
 
     /// 生成 Repository Map（代码库结构骨架）
     Map {
-        /// 输出文件路径（默认：.claude/repo_map/structure.md）
+        /// 输出文件路径（默认：.claude/repo_map/structure.toon 或 structure.md）
         #[arg(short, long)]
         output: Option<String>,
 
         /// 强制重新生成（忽略缓存）
         #[arg(short, long)]
         force: bool,
+
+        /// 输出格式：markdown, toon, toon-grouped（默认：toon）
+        #[arg(long, default_value = "toon")]
+        format: String,
     },
 
     /// 状态机管理（Git 驱动的状态快照）
@@ -346,8 +350,8 @@ fn doctor() -> Result<()> {
 // Repository Map
 // ═══════════════════════════════════════════════════════════════════
 
-fn generate_repo_map(output: Option<String>, force: bool) -> Result<()> {
-    use claude_autonomous::repo_map::RepoMapper;
+fn generate_repo_map(output: Option<String>, force: bool, format_str: String) -> Result<()> {
+    use claude_autonomous::repo_map::{OutputFormat, RepoMapper};
     use std::time::Instant;
 
     let project_root = match find_project_root() {
@@ -359,9 +363,29 @@ fn generate_repo_map(output: Option<String>, force: bool) -> Result<()> {
         }
     };
 
+    // 解析格式参数
+    let format = match format_str.to_lowercase().as_str() {
+        "markdown" | "md" => OutputFormat::Markdown,
+        "toon" => OutputFormat::Toon,
+        "toon-grouped" | "grouped" => OutputFormat::ToonGrouped,
+        _ => {
+            println!("{}", format!("❌ Unknown format: {}", format_str).red());
+            println!("Available formats: markdown, toon, toon-grouped");
+            return Ok(());
+        }
+    };
+
+    let format_name = match format {
+        OutputFormat::Markdown => "Markdown",
+        OutputFormat::Toon => "TOON",
+        OutputFormat::ToonGrouped => "TOON (Grouped)",
+    };
+
     println!(
         "{}",
-        "🗺️  Generating Repository Map...".cyan().bold()
+        format!("🗺️  Generating Repository Map ({})...", format_name)
+            .cyan()
+            .bold()
     );
     println!();
 
@@ -378,13 +402,18 @@ fn generate_repo_map(output: Option<String>, force: bool) -> Result<()> {
 
     // 生成 map
     let mut mapper = RepoMapper::new(&project_root)?;
-    let content = mapper.generate_map()?;
+    let content = mapper.generate_map_with_format(format)?;
 
-    // 确定输出路径
+    // 确定输出路径和扩展名
+    let default_extension = match format {
+        OutputFormat::Markdown => "md",
+        OutputFormat::Toon | OutputFormat::ToonGrouped => "toon",
+    };
+
     let output_path = if let Some(path) = output {
         project_root.join(path)
     } else {
-        project_root.join(".claude/repo_map/structure.md")
+        project_root.join(format!(".claude/repo_map/structure.{}", default_extension))
     };
 
     // 确保目录存在
@@ -393,18 +422,39 @@ fn generate_repo_map(output: Option<String>, force: bool) -> Result<()> {
     }
 
     // 写入文件
-    std::fs::write(&output_path, content)?;
+    std::fs::write(&output_path, &content)?;
 
     let elapsed = start.elapsed();
 
+    // Token 统计（简单估算）
+    let token_count = content.split_whitespace().count();
+    let token_saved_msg = match format {
+        OutputFormat::Toon | OutputFormat::ToonGrouped => {
+            format!(
+                " (预计节省 30-60% tokens，约 {} tokens)",
+                token_count.to_string().cyan()
+            )
+        }
+        OutputFormat::Markdown => String::new(),
+    };
+
     println!();
     println!("{}", "✅ Repository Map generated!".green().bold());
-    println!("   📁 Output: {}", output_path.display().to_string().cyan());
+    println!(
+        "   📁 Output: {}",
+        output_path.display().to_string().cyan()
+    );
+    println!("   📊 Format: {}{}", format_name.cyan(), token_saved_msg);
     println!("   ⏱️  Time: {:.2}s", elapsed.as_secs_f64());
     println!();
-    println!(
-        "💡 Tip: Repository Map 已保存，可用于减少 90% 的上下文 token 消耗"
-    );
+
+    if matches!(format, OutputFormat::Toon | OutputFormat::ToonGrouped) {
+        println!(
+            "💡 Tip: TOON 格式可减少 30-60% token 消耗，更适合 LLM 处理"
+        );
+    } else {
+        println!("💡 Tip: Repository Map 已保存，可用于减少 token 消耗");
+    }
 
     Ok(())
 }
@@ -435,7 +485,11 @@ fn main() -> Result<()> {
         Commands::Status => show_status(),
         Commands::Agents => list_agents(),
         Commands::Doctor => doctor(),
-        Commands::Map { output, force } => generate_repo_map(output, force),
+        Commands::Map {
+            output,
+            force,
+            format,
+        } => generate_repo_map(output, force, format),
         Commands::State(cmd) => {
             use claude_autonomous::cli;
 

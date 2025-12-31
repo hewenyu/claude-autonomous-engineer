@@ -6,11 +6,23 @@
 pub mod cache;
 pub mod extractor;
 pub mod generator;
+pub mod generator_toon;
 pub mod languages;
 pub mod parser;
 
 use anyhow::Result;
 use std::path::{Path, PathBuf};
+
+/// Repository Map 输出格式
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OutputFormat {
+    /// Markdown 格式（传统格式，详细）
+    Markdown,
+    /// TOON 格式（Token-Oriented Object Notation，节省 30-60% token）
+    Toon,
+    /// TOON 分组格式（按符号类型分组）
+    ToonGrouped,
+}
 
 /// 代码符号（函数、结构体、impl 块等）
 #[derive(Debug, Clone)]
@@ -62,8 +74,13 @@ impl RepoMapper {
         })
     }
 
-    /// 生成完整的 Repository Map
+    /// 生成完整的 Repository Map（默认使用 TOON 格式）
     pub fn generate_map(&mut self) -> Result<String> {
+        self.generate_map_with_format(OutputFormat::Toon)
+    }
+
+    /// 生成指定格式的 Repository Map
+    pub fn generate_map_with_format(&mut self, format: OutputFormat) -> Result<String> {
         let files = self.find_source_files()?;
         let mut all_symbols = Vec::new();
 
@@ -76,8 +93,12 @@ impl RepoMapper {
         // 保存缓存
         self.cache.save(&self.project_root)?;
 
-        // 生成 Markdown
-        generator::generate_markdown(&all_symbols)
+        // 根据格式生成输出
+        match format {
+            OutputFormat::Markdown => generator::generate_markdown(&all_symbols),
+            OutputFormat::Toon => generator_toon::generate_toon(&all_symbols),
+            OutputFormat::ToonGrouped => generator_toon::generate_toon_grouped(&all_symbols),
+        }
     }
 
     /// 查找所有源代码文件
