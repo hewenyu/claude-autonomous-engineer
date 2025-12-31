@@ -57,9 +57,9 @@
   "checkpoints": [],
   
   "next_action": {
-    "action": "INITIALIZE",
-    "target": "Run project-architect-supervisor",
-    "reason": "System initialized, awaiting project plan"
+    "action": "PLAN_PHASE",
+    "target": "Run project-architect-supervisor for Phase 1",
+    "reason": "System initialized, plan the first phase"
   },
   
   "contract_hash": null,
