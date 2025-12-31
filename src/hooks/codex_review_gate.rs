@@ -17,9 +17,7 @@ use crate::Memory;
 fn noop_pretooluse_output() -> Value {
     json!({
         "hookSpecificOutput": {
-            "for PreToolUse": {
-                "hookEventName": "PreToolUse"
-            }
+            "hookEventName": "PreToolUse"
         }
     })
 }
@@ -27,11 +25,9 @@ fn noop_pretooluse_output() -> Value {
 fn deny_pretooluse(reason: String) -> Value {
     json!({
         "hookSpecificOutput": {
-            "for PreToolUse": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "deny",
-                "permissionDecisionReason": reason
-            }
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "deny",
+            "permissionDecisionReason": reason
         }
     })
 }
@@ -220,10 +216,10 @@ mod tests {
 
         let result = run_codex_review_gate_hook(temp.path(), &input).unwrap();
         assert_eq!(
-            result["hookSpecificOutput"]["for PreToolUse"]["hookEventName"],
+            result["hookSpecificOutput"]["hookEventName"],
             "PreToolUse"
         );
-        assert!(result["hookSpecificOutput"]["for PreToolUse"]
+        assert!(result["hookSpecificOutput"]
             .get("permissionDecision")
             .is_none());
     }

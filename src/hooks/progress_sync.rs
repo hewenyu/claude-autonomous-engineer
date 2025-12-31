@@ -56,9 +56,7 @@ pub fn run_progress_sync_hook(project_root: &Path, input: &Value) -> Result<Valu
 fn noop_posttooluse_output() -> Value {
     json!({
         "hookSpecificOutput": {
-            "for PostToolUse": {
-                "hookEventName": "PostToolUse"
-            }
+            "hookEventName": "PostToolUse"
         }
     })
 }
@@ -127,7 +125,7 @@ mod tests {
 
         let result = run_progress_sync_hook(temp.path(), &input).unwrap();
         assert_eq!(
-            result["hookSpecificOutput"]["for PostToolUse"]["hookEventName"],
+            result["hookSpecificOutput"]["hookEventName"],
             "PostToolUse"
         );
     }

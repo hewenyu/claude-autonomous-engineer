@@ -79,9 +79,7 @@ pub fn run_error_tracker_hook(project_root: &Path, input: &Value) -> Result<Valu
 fn noop_posttooluse_output() -> Value {
     json!({
         "hookSpecificOutput": {
-            "for PostToolUse": {
-                "hookEventName": "PostToolUse"
-            }
+            "hookEventName": "PostToolUse"
         }
     })
 }
@@ -466,7 +464,7 @@ mod tests {
 
         let result = run_error_tracker_hook(temp.path(), &input).unwrap();
         assert_eq!(
-            result["hookSpecificOutput"]["for PostToolUse"]["hookEventName"],
+            result["hookSpecificOutput"]["hookEventName"],
             "PostToolUse"
         );
 
@@ -499,7 +497,7 @@ mod tests {
         });
         let result = run_error_tracker_hook(temp.path(), &success_input).unwrap();
         assert_eq!(
-            result["hookSpecificOutput"]["for PostToolUse"]["hookEventName"],
+            result["hookSpecificOutput"]["hookEventName"],
             "PostToolUse"
         );
 
