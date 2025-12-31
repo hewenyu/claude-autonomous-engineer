@@ -65,22 +65,38 @@ pub fn is_git_repo(cwd: Option<&Path>) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::TempDir;
 
     #[test]
-    fn test_is_git_repo() {
-        // 测试是否能检测到 git 仓库
-        // 如果当前目录不是 git 仓库，这个测试不会失败
-        let current_dir = std::env::current_dir().unwrap();
-        let _is_repo = is_git_repo(Some(&current_dir));
-        // 只要函数能正常执行就通过测试
+    fn test_is_git_repo_true_and_false() {
+        let non_repo = TempDir::new().unwrap();
+        assert!(!is_git_repo(Some(non_repo.path())));
+
+        let repo = TempDir::new().unwrap();
+        let status = Command::new("git")
+            .args(["init"])
+            .current_dir(repo.path())
+            .status()
+            .unwrap();
+        assert!(status.success());
+        assert!(is_git_repo(Some(repo.path())));
     }
 
     #[test]
     fn test_get_git_root() {
-        let current_dir = std::env::current_dir().unwrap();
-        if is_git_repo(Some(&current_dir)) {
-            let root = get_git_root(Some(&current_dir)).unwrap();
-            assert!(!root.is_empty());
-        }
+        let repo = TempDir::new().unwrap();
+        let status = Command::new("git")
+            .args(["init"])
+            .current_dir(repo.path())
+            .status()
+            .unwrap();
+        assert!(status.success());
+
+        let root = get_git_root(Some(repo.path())).unwrap();
+        assert!(!root.is_empty());
+
+        let expected = std::fs::canonicalize(repo.path()).unwrap();
+        let actual = std::fs::canonicalize(&root).unwrap();
+        assert_eq!(actual, expected);
     }
 }

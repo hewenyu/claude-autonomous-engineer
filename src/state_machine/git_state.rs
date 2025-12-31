@@ -367,9 +367,19 @@ mod tests {
     }
 
     #[test]
-    fn test_create_state_machine() {
-        let (_temp, sm) = setup_test_repo();
-        assert!(sm.state_file.exists() || !sm.state_file.exists()); // Just check it's valid
+    fn test_create_state_machine_creates_status_dir() {
+        let temp = TempDir::new().unwrap();
+        let repo_path = temp.path();
+
+        // 初始化 git 仓库（不预先创建 .claude/status）
+        Repository::init(repo_path).unwrap();
+
+        let sm = GitStateMachine::new(repo_path).unwrap();
+
+        // GitStateMachine::new() 应确保状态目录存在
+        let parent = sm.state_file.parent().unwrap();
+        assert!(parent.exists());
+        assert!(sm.state_file.ends_with(".claude/status/state.json"));
     }
 
     #[test]
@@ -394,6 +404,22 @@ mod tests {
         let state = sm.current_state().unwrap();
         assert_eq!(state.state_id, StateId::Planning);
         assert_eq!(state.task_id, Some("TASK-001".to_string()));
+    }
+
+    #[test]
+    fn test_transition_to_invalid_transition_blocked_by_hook() {
+        let (_temp, sm) = setup_test_repo();
+
+        // 先进入 Planning
+        sm.transition_to(StateId::Planning, Some("TASK-001"), None)
+            .unwrap();
+
+        // Planning -> Completed 在标准工作流中不合法，应被 WorkflowValidationHook 阻止
+        let err = sm
+            .transition_to(StateId::Completed, Some("TASK-001"), None)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("blocked") || err.contains("Invalid transition"));
     }
 
     #[test]

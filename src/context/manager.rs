@@ -264,31 +264,61 @@ impl ContextManager {
             None => return Ok(String::new()),
         };
 
+        // 1) Explicit status path (simple override)
+        let status_candidate = self
+            .project_root
+            .join(STATUS_DIR)
+            .join(format!("{}.md", task_id));
+        if let Some(content) = try_read_file(&status_candidate) {
+            return Ok(format!(
+                "\n## 📝 CURRENT TASK SPEC: {}\n```markdown\n{}\n```\n",
+                task_id,
+                truncate_middle(&content, 12000)
+            ));
+        }
+
         // 在 phases 目录中查找任务文件
         let phases_dir = self.project_root.join(PHASES_DIR);
         if !phases_dir.exists() {
             return Ok(String::new());
         }
 
-        for entry in std::fs::read_dir(&phases_dir)? {
-            let entry = entry?;
-            if !entry.file_type()?.is_dir() {
-                continue;
+        fn find_task_spec_file(dir: &std::path::Path, task_id: &str, depth_left: usize) -> Option<std::path::PathBuf> {
+            if depth_left == 0 {
+                return None;
             }
 
-            for file_entry in std::fs::read_dir(entry.path())? {
-                let file_entry = file_entry?;
-                let file_name = file_entry.file_name();
-                let file_name_str = file_name.to_string_lossy();
+            let entries = std::fs::read_dir(dir).ok()?;
+            for entry in entries.flatten() {
+                let path = entry.path();
+                let ft = entry.file_type().ok()?;
 
-                if file_name_str.contains(task_id) && file_name_str.ends_with(".md") {
-                    if let Some(content) = try_read_file(&file_entry.path()) {
-                        return Ok(format!(
-                            "\n## 📝 CURRENT TASK SPEC: {}\n```markdown\n{}\n```\n",
-                            task_id, content
-                        ));
+                if ft.is_dir() {
+                    if let Some(found) = find_task_spec_file(&path, task_id, depth_left - 1) {
+                        return Some(found);
                     }
+                    continue;
                 }
+
+                if !ft.is_file() {
+                    continue;
+                }
+
+                let filename = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                if filename.ends_with(".md") && filename.contains(task_id) {
+                    return Some(path);
+                }
+            }
+            None
+        }
+
+        if let Some(path) = find_task_spec_file(&phases_dir, task_id, 5) {
+            if let Some(content) = try_read_file(&path) {
+                return Ok(format!(
+                    "\n## 📝 CURRENT TASK SPEC: {}\n```markdown\n{}\n```\n",
+                    task_id,
+                    truncate_middle(&content, 12000)
+                ));
             }
         }
 
@@ -663,5 +693,49 @@ mod tests {
         let manager = ContextManager::new(temp.path().to_path_buf());
         let ctx = manager.get_memory_context().unwrap();
         assert!(ctx.contains("CURRENT STATE"));
+    }
+
+    #[test]
+    fn test_get_current_task_spec_reads_from_status() {
+        let temp = TempDir::new().unwrap();
+        std::fs::create_dir_all(temp.path().join(".claude/status")).unwrap();
+
+        std::fs::write(
+            temp.path().join(".claude/status/memory.json"),
+            r#"{ "current_task": { "id": "TASK-001" } }"#,
+        )
+        .unwrap();
+        std::fs::write(
+            temp.path().join(".claude/status/TASK-001.md"),
+            "# TASK-001: Example\n\n## Status: In Progress\n",
+        )
+        .unwrap();
+
+        let manager = ContextManager::new(temp.path().to_path_buf());
+        let ctx = manager.get_current_task_spec().unwrap();
+        assert!(ctx.contains("TASK-001"));
+        assert!(ctx.contains("Example"));
+    }
+
+    #[test]
+    fn test_get_current_task_spec_reads_from_phases() {
+        let temp = TempDir::new().unwrap();
+        std::fs::create_dir_all(temp.path().join(".claude/status")).unwrap();
+        std::fs::create_dir_all(temp.path().join(".claude/phases/phase-1_test")).unwrap();
+
+        std::fs::write(
+            temp.path().join(".claude/status/memory.json"),
+            r#"{ "current_task": { "id": "TASK-001" } }"#,
+        )
+        .unwrap();
+        std::fs::write(
+            temp.path().join(".claude/phases/phase-1_test/TASK-001_spec.md"),
+            "# TASK-001: Example (phase)\n",
+        )
+        .unwrap();
+
+        let manager = ContextManager::new(temp.path().to_path_buf());
+        let ctx = manager.get_current_task_spec().unwrap();
+        assert!(ctx.contains("Example (phase)"));
     }
 }

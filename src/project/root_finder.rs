@@ -73,10 +73,15 @@ pub fn find_project_root_or_current() -> PathBuf {
 mod tests {
     use super::*;
     use std::fs;
+    use std::sync::{Mutex, OnceLock};
     use tempfile::TempDir;
+
+    static CWD_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
     #[test]
     fn test_find_project_root_in_current_dir() {
+        let _guard = CWD_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap();
+
         // 保存当前目录
         let original_dir = env::current_dir().unwrap();
 
