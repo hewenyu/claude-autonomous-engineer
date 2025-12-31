@@ -35,7 +35,7 @@ enum Commands {
 
     /// 运行 hook（由 Claude Code 调用）
     Hook {
-        /// Hook 名称: inject_state, codex_review_gate, progress_sync, loop_driver
+        /// Hook 名称: inject_state, codex_review_gate, progress_sync, error_tracker, loop_driver
         name: String,
     },
 
@@ -50,6 +50,61 @@ enum Commands {
 
     /// 诊断环境和配置
     Doctor,
+
+    /// 生成 Repository Map（代码库结构骨架）
+    Map {
+        /// 输出文件路径（默认：.claude/repo_map/structure.toon 或 structure.md）
+        #[arg(short, long)]
+        output: Option<String>,
+
+        /// 强制重新生成（忽略缓存）
+        #[arg(short, long)]
+        force: bool,
+
+        /// 输出格式：markdown, toon, toon-grouped（默认：toon）
+        #[arg(long, default_value = "toon")]
+        format: String,
+    },
+
+    /// 状态机管理（Git 驱动的状态快照）
+    #[command(subcommand)]
+    State(StateCommands),
+}
+
+/// 状态机子命令
+#[derive(Subcommand)]
+enum StateCommands {
+    /// 列出所有状态快照
+    List,
+
+    /// 显示当前状态
+    Current,
+
+    /// 回滚到指定 tag
+    Rollback {
+        /// Tag 名称（例如：state-20251231-120000-planning-TASK-001）
+        tag: String,
+    },
+
+    /// 显示状态转换图
+    Graph {
+        /// 仅显示指定任务的转换（可选）
+        #[arg(short, long)]
+        task_id: Option<String>,
+    },
+
+    /// 手动创建状态转换
+    Transition {
+        /// 目标状态（idle, planning, coding, testing, reviewing, completed, blocked）
+        state: String,
+
+        /// 任务 ID（可选）
+        #[arg(short, long)]
+        task_id: Option<String>,
+    },
+
+    /// 显示工作流帮助
+    Help,
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -132,7 +187,7 @@ fn show_status() -> Result<()> {
         match parse_roadmap(&content) {
             Ok(data) => {
                 let pct = if data.total > 0 {
-                    (data.completed.len() as f64 / data.total as f64) * 100.0
+                    ((data.completed.len() + data.skipped.len()) as f64 / data.total as f64) * 100.0
                 } else {
                     0.0
                 };
@@ -147,6 +202,7 @@ fn show_status() -> Result<()> {
                 );
                 println!("   {} Pending: {}", "○".white(), data.pending.len());
                 println!("   {} Blocked: {}", "!".red(), data.blocked.len());
+                println!("   {} Skipped: {}", "−".blue(), data.skipped.len());
                 println!("   Total: {} ({:.1}%)", data.total, pct);
 
                 if let Some(phase) = &data.current_phase {
@@ -292,6 +348,114 @@ fn doctor() -> Result<()> {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// Repository Map
+// ═══════════════════════════════════════════════════════════════════
+
+fn generate_repo_map(output: Option<String>, force: bool, format_str: String) -> Result<()> {
+    use claude_autonomous::repo_map::{OutputFormat, RepoMapper};
+    use std::time::Instant;
+
+    let project_root = match find_project_root() {
+        Some(root) => root,
+        None => {
+            println!("{}", "❌ No .claude directory found".red());
+            println!("Run {} to initialize", "claude-autonomous init".cyan());
+            return Ok(());
+        }
+    };
+
+    // 解析格式参数
+    let format = match format_str.to_lowercase().as_str() {
+        "markdown" | "md" => OutputFormat::Markdown,
+        "toon" => OutputFormat::Toon,
+        "toon-grouped" | "grouped" => OutputFormat::ToonGrouped,
+        _ => {
+            println!("{}", format!("❌ Unknown format: {}", format_str).red());
+            println!("Available formats: markdown, toon, toon-grouped");
+            return Ok(());
+        }
+    };
+
+    let format_name = match format {
+        OutputFormat::Markdown => "Markdown",
+        OutputFormat::Toon => "TOON",
+        OutputFormat::ToonGrouped => "TOON (Grouped)",
+    };
+
+    println!(
+        "{}",
+        format!("🗺️  Generating Repository Map ({})...", format_name)
+            .cyan()
+            .bold()
+    );
+    println!();
+
+    let start = Instant::now();
+
+    // 如果强制重新生成，清除缓存
+    if force {
+        let cache_file = project_root.join(".claude/repo_map/cache.json");
+        if cache_file.exists() {
+            std::fs::remove_file(&cache_file)?;
+            println!("{}", "   🗑️  Cleared cache".yellow());
+        }
+    }
+
+    // 生成 map
+    let mut mapper = RepoMapper::new(&project_root)?;
+    let content = mapper.generate_map_with_format(format)?;
+
+    // 确定输出路径和扩展名
+    let default_extension = match format {
+        OutputFormat::Markdown => "md",
+        OutputFormat::Toon | OutputFormat::ToonGrouped => "toon",
+    };
+
+    let output_path = if let Some(path) = output {
+        project_root.join(path)
+    } else {
+        project_root.join(format!(".claude/repo_map/structure.{}", default_extension))
+    };
+
+    // 确保目录存在
+    if let Some(parent) = output_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+
+    // 写入文件
+    std::fs::write(&output_path, &content)?;
+
+    let elapsed = start.elapsed();
+
+    // Token 统计（简单估算）
+    let token_count = content.split_whitespace().count();
+    let token_saved_msg = match format {
+        OutputFormat::Toon | OutputFormat::ToonGrouped => {
+            format!(
+                " (预计节省 30-60% tokens，约 {} tokens)",
+                token_count.to_string().cyan()
+            )
+        }
+        OutputFormat::Markdown => String::new(),
+    };
+
+    println!();
+    println!("{}", "✅ Repository Map generated!".green().bold());
+    println!("   📁 Output: {}", output_path.display().to_string().cyan());
+    println!("   📊 Format: {}{}", format_name.cyan(), token_saved_msg);
+    println!("   ⏱️  Time: {:.2}s", elapsed.as_secs_f64());
+    println!();
+
+    if matches!(format, OutputFormat::Toon | OutputFormat::ToonGrouped) {
+        println!("💡 Tip: TOON 格式可减少 30-60% token 消耗，更适合 LLM 处理");
+    } else {
+        println!("💡 Tip: Repository Map 已保存，可用于减少 token 消耗");
+    }
+
+    Ok(())
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // Main
 // ═══════════════════════════════════════════════════════════════════
 
@@ -317,5 +481,24 @@ fn main() -> Result<()> {
         Commands::Status => show_status(),
         Commands::Agents => list_agents(),
         Commands::Doctor => doctor(),
+        Commands::Map {
+            output,
+            force,
+            format,
+        } => generate_repo_map(output, force, format),
+        Commands::State(cmd) => {
+            use claude_autonomous::cli;
+
+            match cmd {
+                StateCommands::List => cli::list_states(),
+                StateCommands::Current => cli::show_current_state(),
+                StateCommands::Rollback { tag } => cli::rollback_to_tag(&tag),
+                StateCommands::Graph { task_id } => cli::show_state_graph(task_id.as_deref()),
+                StateCommands::Transition { state, task_id } => {
+                    cli::transition_to(&state, task_id.as_deref())
+                }
+                StateCommands::Help => cli::show_workflow_help(),
+            }
+        }
     }
 }

@@ -50,4 +50,8 @@ Thumbs.db
 # Misc
 .cache/
 
+# Local tooling / generated artifacts
+.serena/
+.claude/repo_map/
+
 # End of file

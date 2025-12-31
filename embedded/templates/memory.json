@@ -2,6 +2,10 @@
   "_schema_version": "3.0",
   "_description": "Autonomous Engineering System - State File",
   "_last_updated": null,
+
+  "project": "unknown",
+  "version": "1.0",
+  "mode": "autonomous",
   
   "session": {
     "started_at": null,
@@ -12,7 +16,7 @@
   "current_task": {
     "id": null,
     "name": null,
-    "status": "NOT_STARTED",
+    "status": "PENDING",
     "phase": null,
     "started_at": null,
     "retry_count": 0,

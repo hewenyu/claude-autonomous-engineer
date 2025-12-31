@@ -46,7 +46,7 @@ pub fn init_project(project_root: &Path, name: Option<&str>, force: bool) -> Res
     println!("\nNext steps:");
     println!(
         "  1. Edit {} to add project instructions",
-        ".claude/CLAUDE.md".cyan()
+        "CLAUDE.md".cyan()
     );
     println!(
         "  2. Review {} for hook configuration",
@@ -159,7 +159,8 @@ Use the following status markers:
 - `[ ]` - Pending
 - `[>]` - In Progress
 - `[x]` - Completed
-- `[!]` - Blocked
+- `[!]` - Blocked (requires intervention; blocks overall completion)
+- `[-]` - Skipped (explicitly skipped; does not block overall completion)
 "#;
     let roadmap_path = project_root.join(".claude/status/ROADMAP.md");
     fs::write(&roadmap_path, roadmap_template)?;
@@ -185,6 +186,20 @@ modules:
     let contract_path = project_root.join(".claude/status/api_contract.yaml");
     fs::write(&contract_path, contract_template)?;
     println!("  ✓ {}", ".claude/status/api_contract.yaml".cyan());
+
+    // requirements.md 模板（可选但推荐）
+    let requirements_template = r#"# Requirements
+
+Describe the original user request / PRD here.
+
+- Goals:
+- Non-goals:
+- Constraints:
+- Acceptance criteria:
+"#;
+    let requirements_path = project_root.join(".claude/status/requirements.md");
+    fs::write(&requirements_path, requirements_template)?;
+    println!("  ✓ {}", ".claude/status/requirements.md".cyan());
 
     // error_history.json 初始化为空数组
     let error_history_path = project_root.join(".claude/status/error_history.json");
@@ -229,6 +244,7 @@ mod tests {
             .path()
             .join(".claude/status/api_contract.yaml")
             .exists());
+        assert!(temp.path().join(".claude/status/requirements.md").exists());
 
         // 验证 agent 文件
         let agents_dir = temp.path().join(".claude/agents");

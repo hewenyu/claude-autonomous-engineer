@@ -3,10 +3,22 @@
 //! 定义 Memory, RoadmapData, TaskItem 等数据结构
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use std::collections::BTreeMap;
 
 /// Memory 数据结构 - 对应 .claude/status/memory.json
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Memory {
+    // Template metadata fields (keep as-is in memory.json)
+    #[serde(rename = "_schema_version", default)]
+    pub schema_version: Option<String>,
+
+    #[serde(rename = "_description", default)]
+    pub description: Option<String>,
+
+    #[serde(rename = "_last_updated", default)]
+    pub last_updated: Option<String>,
+
     #[serde(default)]
     pub project: String,
 
@@ -17,7 +29,7 @@ pub struct Memory {
     pub mode: String,
 
     #[serde(default)]
-    pub current_phase: Option<String>,
+    pub session: Session,
 
     #[serde(default)]
     pub current_task: CurrentTask,
@@ -32,13 +44,39 @@ pub struct Memory {
     pub progress: Progress,
 
     #[serde(default)]
+    pub error_state: ErrorState,
+
+    #[serde(default)]
+    pub checkpoints: Vec<Value>,
+
+    #[serde(default)]
     pub next_action: NextAction,
 
     #[serde(default)]
-    pub error_history: Vec<ErrorRecord>,
+    pub contract_hash: Option<String>,
 
     #[serde(default)]
-    pub decisions_log: Vec<String>,
+    pub warnings: Vec<String>,
+
+    // Preserve forward-compatible/unknown fields to avoid wiping user state.
+    #[serde(flatten)]
+    pub extra: BTreeMap<String, Value>,
+}
+
+/// 会话信息（对应 memory.json.session）
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct Session {
+    #[serde(default)]
+    pub started_at: Option<String>,
+
+    #[serde(default)]
+    pub loop_count: u64,
+
+    #[serde(default)]
+    pub last_context_compression_at: Option<String>,
+
+    #[serde(flatten)]
+    pub extra: BTreeMap<String, Value>,
 }
 
 /// 当前任务
@@ -46,6 +84,7 @@ pub struct Memory {
 pub struct CurrentTask {
     pub id: Option<String>,
     pub name: Option<String>,
+    #[serde(default = "default_task_status")]
     pub status: String,
     pub phase: Option<String>,
     pub started_at: Option<String>,
@@ -57,11 +96,20 @@ pub struct CurrentTask {
     pub max_retries: u32,
 
     pub acceptance_progress: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_updated: Option<String>,
+
+    #[serde(flatten)]
+    pub extra: BTreeMap<String, Value>,
 }
 
 fn default_max_retries() -> u32 {
     5
+}
+
+fn default_task_status() -> String {
+    "PENDING".to_string()
 }
 
 /// 工作上下文
@@ -71,6 +119,12 @@ pub struct WorkingContext {
     pub current_function: Option<String>,
     pub pending_tests: Vec<String>,
     pub pending_implementations: Vec<String>,
+
+    #[serde(default)]
+    pub modified_files: Vec<String>,
+
+    #[serde(flatten)]
+    pub extra: BTreeMap<String, Value>,
 }
 
 /// 进度信息
@@ -88,10 +142,23 @@ pub struct Progress {
     #[serde(default)]
     pub tasks_in_progress: usize,
 
+    #[serde(default)]
+    pub tasks_skipped: usize,
+
     pub current_phase: Option<String>,
     pub current_phase_name: Option<String>,
     pub current_phase_status: Option<String>,
+
+    #[serde(default)]
+    pub phases_completed: usize,
+
+    #[serde(default)]
+    pub phases_total: usize,
+
     pub last_synced: Option<String>,
+
+    #[serde(flatten)]
+    pub extra: BTreeMap<String, Value>,
 }
 
 /// 下一步行动
@@ -100,16 +167,31 @@ pub struct NextAction {
     pub action: String,
     pub target: Option<String>,
     pub reason: Option<String>,
+
+    #[serde(flatten)]
+    pub extra: BTreeMap<String, Value>,
 }
 
-/// 错误记录
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ErrorRecord {
-    pub task: String,
-    pub error: String,
-    pub attempted_fix: Option<String>,
-    pub resolution: Option<String>,
-    pub timestamp: Option<String>,
+/// 错误状态（对应 memory.json.error_state）
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ErrorState {
+    #[serde(default)]
+    pub last_error: Option<String>,
+
+    #[serde(default)]
+    pub last_error_at: Option<String>,
+
+    #[serde(default)]
+    pub error_count: u64,
+
+    #[serde(default)]
+    pub blocked: bool,
+
+    #[serde(default)]
+    pub block_reason: Option<String>,
+
+    #[serde(flatten)]
+    pub extra: BTreeMap<String, Value>,
 }
 
 /// Roadmap 数据结构
@@ -119,6 +201,7 @@ pub struct RoadmapData {
     pub in_progress: Vec<TaskItem>,
     pub completed: Vec<TaskItem>,
     pub blocked: Vec<TaskItem>,
+    pub skipped: Vec<TaskItem>,
     pub current_phase: Option<String>,
     pub total: usize,
 }
@@ -139,7 +222,7 @@ impl RoadmapData {
 
     /// 检查是否全部完成
     pub fn is_complete(&self) -> bool {
-        self.pending.is_empty() && self.in_progress.is_empty()
+        self.pending.is_empty() && self.in_progress.is_empty() && self.blocked.is_empty()
     }
 }
 

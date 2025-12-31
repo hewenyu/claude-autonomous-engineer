@@ -39,6 +39,17 @@ chrono = { version = "0.4", features = ["serde"] }
 md5 = "0.7"
 dirs = "5.0"
 
+# Repository Mapping
+tree-sitter = "0.22"
+tree-sitter-rust = "0.21"
+blake3 = "1.5"
+walkdir = "2.4"
+ignore = "0.4"
+rayon = "1.8"
+
+# Git State Machine
+git2 = "0.18"
+
 # 资源嵌入
 rust-embed = "8.9"
 

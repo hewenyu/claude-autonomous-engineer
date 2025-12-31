@@ -22,16 +22,16 @@
 │   │    HOOKS         │    │     AGENTS       │    │     STATE        │     │
 │   │  (Deterministic) │    │   (Cognitive)    │    │    (Files)       │     │
 │   ├──────────────────┤    ├──────────────────┤    ├──────────────────┤     │
-│   │ inject_state.py  │◄───│ project-         │───►│ ROADMAP.md       │     │
+│   │ inject_state     │◄───│ project-         │───►│ ROADMAP.md       │     │
 │   │   ↓              │    │  architect       │    │                  │     │
 │   │ context_manager  │    │                  │    │ api_contract.yaml│     │
 │   │                  │    │ code-executor    │───►│                  │     │
-│   │ progress_sync.py │◄───│                  │    │ memory.json      │     │
+│   │ progress_sync    │◄───│                  │    │ memory.json      │     │
 │   │                  │    │ codex-reviewer   │───►│                  │     │
 │   │ codex_review_    │◄───│                  │    │ error_history.   │     │
-│   │    gate.py       │    │                  │    │    json          │     │
+│   │    gate          │    │                  │    │    json          │     │
 │   │                  │    │                  │    │                  │     │
-│   │ loop_driver.py   │◄───┼──────────────────┼────│ TASK-xxx.md      │     │
+│   │ loop_driver      │◄───┼──────────────────┼────│ TASK-xxx.md      │     │
 │   └──────────────────┘    └──────────────────┘    └──────────────────┘     │
 │                                                                              │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -43,7 +43,7 @@
 
 ### 1. STATE RECOVERY FIRST（状态恢复优先）
 
-**在执行任何操作之前**，上下文会自动注入（通过 inject_state.py）：
+**在执行任何操作之前**，上下文会自动注入（通过 `claude-autonomous hook inject_state`）：
 
 ```
 自动注入的内容：
@@ -83,13 +83,13 @@
 1. 查文档/API 契约
 2. 尝试修复
 3. 尝试替代方案
-4. 记录错误（python3 .claude/hooks/error_tracker.py add ...）
-5. 只有连续失败 5+ 次才能报告阻塞
+4. 错误会自动记录到 `.claude/status/error_history.json`（由 hook 采集）
+5. 只有连续失败 5+ 次才能报告阻塞（或将任务标记为 `[!]`）
 ```
 
 ### 3. AUTOMATIC PROGRESS SYNC（自动进度同步）
 
-修改 Markdown 文件时会自动同步（通过 progress_sync.py）：
+修改 Markdown 文件时会自动同步（通过 `claude-autonomous hook progress_sync`）：
 
 ```
 ROADMAP.md 修改 → 自动更新 memory.json 的 progress
@@ -99,7 +99,7 @@ PHASE_PLAN.md 修改 → 自动更新 memory.json 的 current_phase
 
 ### 4. QUALITY GATE（自动质量门禁）
 
-提交代码时会自动审查（通过 codex_review_gate.py）：
+提交代码时会自动审查（通过 `claude-autonomous hook codex_review_gate`）：
 
 ```
 git commit 触发 → 拦截 → 注入完整上下文 → Codex 审查 → PASS/FAIL
@@ -124,7 +124,7 @@ project-architect-supervisor
         │
         ├─── 生成 ROADMAP.md ──────┐
         ├─── 生成 api_contract.yaml │
-        └─── 生成 TASK-xxx.md ─────┼──► progress_sync.py ──► memory.json
+        └─── 生成 TASK-xxx.md ─────┼──► progress_sync hook ──► memory.json
                                     │
         ┌───────────────────────────┘
         ▼
@@ -134,11 +134,11 @@ code-executor
         ├─── 读取 api_contract.yaml (签名)
         ├─── 读取 error_history.json (避免重复)
         │
-        ├─── 写代码 ──► progress_sync.py ──► memory.json
+        ├─── 写代码 ──► progress_sync hook ──► memory.json
         └─── git commit
                 │
                 ▼
-codex_review_gate.py (自动触发)
+codex_review_gate hook (自动触发)
         │
         ├─── 读取 api_contract.yaml (验证)
         ├─── 读取 TASK-xxx.md (需求)
@@ -160,7 +160,7 @@ codex_review_gate.py (自动触发)
                               ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │  1. CONTEXT INJECTION (自动)                                         │
-│     inject_state.py 注入：                                           │
+│     inject_state 注入：                                              │
 │     - memory.json (当前状态)                                         │
 │     - ROADMAP.md (待处理任务)                                        │
 │     - TASK-xxx.md (当前任务规格)                                     │
@@ -181,7 +181,7 @@ codex_review_gate.py (自动触发)
 │  3. EXECUTE                                                          │
 │     - 调用 code-executor                                             │
 │     - TDD: 写测试 → 验证失败 → 实现 → 验证通过 → Lint                 │
-│     - 每步完成后自动更新 memory.json (progress_sync.py)               │
+│     - 每步完成后自动更新 memory.json (progress_sync hook)             │
 └─────────────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -189,7 +189,7 @@ codex_review_gate.py (自动触发)
 │  4. COMMIT (触发自动审查)                                            │
 │     - git add <files>                                                │
 │     - git commit -m "TASK-xxx: ..."                                  │
-│     - codex_review_gate.py 自动拦截并审查                            │
+│     - codex_review_gate hook 自动拦截并审查                          │
 │     ┌────────────────────────────────────────────────────────────┐  │
 │     │  PASS → 提交成功 → 更新 ROADMAP [x]                         │  │
 │     │  FAIL → 阻止提交 → 问题反馈给 Claude → 返回步骤 3            │  │
@@ -199,12 +199,12 @@ codex_review_gate.py (自动触发)
                               ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │  5. LOOP CHECK (自动)                                                │
-│     loop_driver.py 检查：                                            │
+│     loop_driver 检查：                                               │
 │     - ROADMAP 是否还有 pending？                                     │
 │       - YES → 阻止停止，继续循环                                     │
 │       - NO → 允许停止，生成完成报告                                   │
 │     - 是否卡住？(同一任务失败5次)                                     │
-│       - YES → 提示换方案或跳过                                       │
+│       - YES → 提示换方案 / 标记为阻塞 / 显式跳过                       │
 └─────────────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -216,39 +216,22 @@ codex_review_gate.py (自动触发)
 ## 📁 File Structure
 
 ```
+CLAUDE.md                      # 本文件 (宪法 / 工作协议)
 .claude/
-├── CLAUDE.md                     # 本文件 (宪法)
-├── settings.json                 # Hook 配置
-│
-├── lib/
-│   └── context_manager.py        # 统一上下文管理器
-│
-├── hooks/
-│   ├── inject_state.py           # UserPromptSubmit: 注入上下文
-│   ├── progress_sync.py          # PostToolUse: 同步进度
-│   ├── codex_review_gate.py      # PreToolUse: 提交前审查
-│   └── loop_driver.py            # Stop: 控制循环
-│
-├── agents/
-│   ├── project-architect-supervisor.md
-│   ├── code-executor.md
-│   └── codex-reviewer.md
-│
-├── status/                       # 状态文件 (唯一真相来源)
-│   ├── ROADMAP.md                # 任务列表
-│   ├── api_contract.yaml         # API 契约
-│   ├── memory.json               # 当前状态
-│   ├── error_history.json        # 错误历史
-│   ├── decisions.log             # 决策日志
-│   └── review_history.json       # 审查历史
-│
-└── phases/                       # 阶段详情
-    ├── phase-1_xxx/
-    │   ├── PHASE_PLAN.md
-    │   ├── TASK-001_xxx.md
-    │   └── TASK-002_xxx.md
-    └── phase-2_xxx/
-        └── ...
+├── settings.json               # Hook 配置（调用 claude-autonomous hooks）
+├── agents/                     # Agent 定义（给 Claude 的角色说明）
+├── status/                     # 状态文件（唯一真相来源）
+│   ├── ROADMAP.md              # 任务清单
+│   ├── api_contract.yaml       # API 契约（实现必须匹配）
+│   ├── memory.json             # 当前状态（任务/进度/下一步）
+│   ├── requirements.md         # 原始需求（可选，但强烈建议）
+│   ├── error_history.json      # 错误历史（自动采集 + 可手动补充）
+│   ├── decisions.log           # 决策日志（自动追加）
+│   └── state.json              # （可选）Git 状态机开关/当前状态
+└── phases/                     # 阶段与任务规格
+    └── phase-N_xxx/
+        ├── PHASE_PLAN.md
+        └── TASK-NNN_xxx.md
 ```
 
 ---
@@ -259,8 +242,8 @@ codex_review_gate.py (自动触发)
 2. **禁止直接写业务代码** - 通过 Agent 执行
 3. **禁止跳过测试** - TDD 是强制的
 4. **禁止忽略错误历史** - 检查 error_history.json
-5. **禁止手动更新进度** - progress_sync.py 会自动处理
-6. **禁止绕过审查** - codex_review_gate.py 会自动触发
+5. **禁止手动更新进度** - progress_sync 会自动处理
+6. **禁止绕过审查** - codex_review_gate 会自动触发
 
 ---
 
@@ -269,7 +252,7 @@ codex_review_gate.py (自动触发)
 ### 当循环卡住时
 
 ```
-loop_driver.py 会检测并提示：
+loop_driver 会检测并提示：
 1. 同一任务失败 5 次 → 提示换方案
 2. 连续 10 个错误 → 提示需要人工介入
 3. 提供恢复上下文 (next_action, current_file, pending_tests)
@@ -278,8 +261,8 @@ loop_driver.py 会检测并提示：
 ### 当需要跳过任务时
 
 ```markdown
-# 在 ROADMAP.md 中标记为阻塞:
-- [!] TASK-xxx: Description (BLOCKED: reason)
+# 在 ROADMAP.md 中显式标记为跳过（不会阻止整体完成）:
+- [-] TASK-xxx: Description (SKIPPED: reason)
 
 # 然后继续下一个任务
 ```
@@ -288,7 +271,7 @@ loop_driver.py 会检测并提示：
 
 ```
 不要恐慌！
-1. inject_state.py 会自动注入所有需要的上下文
+1. inject_state 会自动注入所有需要的上下文
 2. 检查注入的 next_action
 3. 如果 next_action 不明确，从 ROADMAP 取下一个 pending
 4. 检查 error_history 避免重复

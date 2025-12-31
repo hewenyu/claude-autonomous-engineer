@@ -6,7 +6,8 @@ use std::io::{self, Read};
 use std::path::Path;
 
 use super::{
-    run_codex_review_gate_hook, run_inject_state_hook, run_loop_driver_hook, run_progress_sync_hook,
+    run_codex_review_gate_hook, run_error_tracker_hook, run_inject_state_hook,
+    run_loop_driver_hook, run_progress_sync_hook,
 };
 
 /// 运行指定的 hook
@@ -26,6 +27,11 @@ pub fn run_hook(hook_name: &str, project_root: &Path, input: Option<&Value>) -> 
         "codex_review_gate" | "pre_write_check" => {
             let input_data = input.unwrap_or(&default_input);
             run_codex_review_gate_hook(project_root, input_data)
+        }
+
+        "error_tracker" => {
+            let input_data = input.unwrap_or(&default_input);
+            run_error_tracker_hook(project_root, input_data)
         }
 
         "loop_driver" => run_loop_driver_hook(project_root),
@@ -99,7 +105,10 @@ mod tests {
         });
 
         let result = run_hook("codex_review_gate", temp.path(), Some(&input)).unwrap();
-        assert_eq!(result["decision"], "allow");
+        assert_eq!(result["hookSpecificOutput"]["hookEventName"], "PreToolUse");
+        assert!(result["hookSpecificOutput"]
+            .get("permissionDecision")
+            .is_none());
     }
 
     #[test]

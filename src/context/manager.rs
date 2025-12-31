@@ -1,6 +1,6 @@
 //! 上下文管理器核心
 //!
-//! ContextManager - 统一上下文管理，重写 Python context_manager.py (631 行)
+//! ContextManager - 统一上下文管理（替代历史上的 Python 版本实现）
 
 use anyhow::Result;
 use std::collections::HashMap;
@@ -9,6 +9,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::context::truncate::truncate_middle;
 use crate::state::{parse_roadmap, Memory};
+use crate::state_machine::{GitStateMachine, WorkflowEngine};
 use crate::utils::{get_git_log, read_json, try_read_file};
 
 // ═══════════════════════════════════════════════════════════════════
@@ -217,10 +218,10 @@ impl ContextManager {
         let data = parse_roadmap(&content)?;
 
         let mut ctx = String::from("\n## 📋 ROADMAP\n");
+        let done = data.completed.len() + data.skipped.len();
         ctx.push_str(&format!(
-            "\n**Progress**: {}/{} tasks completed\n",
-            data.completed.len(),
-            data.total
+            "\n**Progress**: {}/{} tasks done (completed + skipped)\n",
+            done, data.total
         ));
 
         // 进行中
@@ -384,6 +385,46 @@ impl ContextManager {
     }
 
     // ═══════════════════════════════════════════════════════════════════
+    // Layer 4.5: Repository Map (代码骨架)
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// 获取 Repository Map 上下文
+    pub fn get_repo_map_context(&self) -> Result<String> {
+        // 优先使用 TOON（更省 token），其次 Markdown
+        let candidates = [
+            (".claude/repo_map/structure.toon", "TOON"),
+            (".claude/repo_map/structure.md", "Markdown"),
+        ];
+
+        let mut selected: Option<(std::path::PathBuf, &'static str)> = None;
+
+        for (rel_path, label) in candidates {
+            let path = self.project_root.join(rel_path);
+            if path.exists() {
+                selected = Some((path, label));
+                break;
+            }
+        }
+
+        let Some((repo_map_file, label)) = selected else {
+            // 未生成则只给极短提示，避免每次注入都浪费 token
+            return Ok("\n## 🗺️ REPOSITORY MAP\n\n*Not generated. Run `claude-autonomous map` (recommended: default TOON).* \n".to_string());
+        };
+
+        let content = match try_read_file(&repo_map_file) {
+            Some(c) => c,
+            None => return Ok(String::new()),
+        };
+
+        // Repository Map 通常较大，限制在 15K tokens 左右
+        Ok(format!(
+            "\n## 🗺️ REPOSITORY MAP (Code Skeleton - {})\n```text\n{}\n```\n",
+            label,
+            truncate_middle(&content, 15000)
+        ))
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
     // Layer 5-8: 其他上下文
     // ═══════════════════════════════════════════════════════════════════
 
@@ -416,6 +457,93 @@ impl ContextManager {
         Ok(format!("\n## 📝 RECENT DECISIONS\n```\n{}\n```\n", recent))
     }
 
+    /// 获取状态机上下文（新增）
+    pub fn get_state_machine_context(&self) -> Result<String> {
+        // 默认关闭：只有当用户显式启用（创建了 state.json）后才注入状态机上下文
+        let state_file = self.project_root.join(STATUS_DIR).join("state.json");
+        if !state_file.exists() {
+            return Ok(String::new());
+        }
+
+        // 尝试加载状态机
+        let state_machine = match GitStateMachine::new(&self.project_root) {
+            Ok(sm) => sm,
+            Err(_) => {
+                // 如果不是 git 仓库或没有初始化，返回空
+                return Ok(String::new());
+            }
+        };
+
+        // 获取当前状态
+        let current_state = state_machine.current_state()?;
+
+        let mut ctx = String::from("\n## 🔄 STATE MACHINE\n\n");
+
+        // 当前状态
+        ctx.push_str(&format!(
+            "**Current State**: {} {}\n",
+            current_state.state_id.icon(),
+            current_state.state_id.as_str().to_uppercase()
+        ));
+
+        if let Some(task_id) = &current_state.task_id {
+            ctx.push_str(&format!("**Task ID**: {}\n", task_id));
+        }
+
+        if let Some(phase) = &current_state.phase {
+            ctx.push_str(&format!("**Phase**: {}\n", phase));
+        }
+
+        // 状态描述
+        ctx.push_str(&format!(
+            "**Description**: {}\n\n",
+            WorkflowEngine::state_description(current_state.state_id)
+        ));
+
+        // 可能的后继状态
+        let next_states = WorkflowEngine::next_states(current_state.state_id);
+        if !next_states.is_empty() {
+            ctx.push_str("**Possible Next States**:\n");
+            for next in &next_states {
+                let recommended = if WorkflowEngine::recommend_next_state(current_state.state_id)
+                    == Some(*next)
+                {
+                    " (Recommended)"
+                } else {
+                    ""
+                };
+
+                ctx.push_str(&format!(
+                    "  → {} {}{}\n",
+                    next.icon(),
+                    next.as_str(),
+                    recommended
+                ));
+            }
+            ctx.push('\n');
+        }
+
+        // 最近的状态转换历史（最多 5 个）
+        let snapshots = state_machine.list_states()?;
+        if snapshots.len() > 1 {
+            ctx.push_str("**Recent Transitions**:\n");
+            for snapshot in snapshots.iter().take(5) {
+                if let Some((state_id, task_id)) = snapshot.parse_tag_info() {
+                    let task_str = task_id.as_deref().unwrap_or("-");
+                    ctx.push_str(&format!(
+                        "  {} {} [{}] - {}\n",
+                        state_id.icon(),
+                        state_id.as_str(),
+                        task_str,
+                        snapshot.formatted_time()
+                    ));
+                }
+            }
+        }
+
+        Ok(ctx)
+    }
+
     // ═══════════════════════════════════════════════════════════════════
     // 组装方法
     // ═══════════════════════════════════════════════════════════════════
@@ -425,8 +553,10 @@ impl ContextManager {
         let parts = [
             self.get_system_header(ContextMode::Autonomous),
             self.get_memory_context()?,
+            self.get_state_machine_context()?, // 新增：State Machine
             self.get_roadmap_context(false)?,
             self.get_current_task_spec()?,
+            self.get_repo_map_context()?, // Repository Map
             self.get_error_context(None)?,
             self.get_contract_context()?,
             self.get_git_context(10)?,

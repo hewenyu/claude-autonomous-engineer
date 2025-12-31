@@ -7,18 +7,23 @@ use serde_json::{json, Value};
 use std::path::Path;
 
 use crate::state::{parse_roadmap, Memory};
+use crate::state_machine::{GitStateMachine, StateId};
 use crate::utils::{read_json, try_read_file};
 
 /// 最大重试次数
-const MAX_RETRIES: u32 = 5;
+const DEFAULT_MAX_RETRIES: u32 = 5;
 const MAX_CONSECUTIVE_ERRORS: usize = 10;
 
 /// 运行 loop_driver hook
 ///
 /// 检查 ROADMAP 完成状态，决定是否继续循环
+/// 同时执行自动状态转换
 pub fn run_loop_driver_hook(project_root: &Path) -> Result<Value> {
     let roadmap = check_roadmap(project_root)?;
     let stuck = check_stuck(project_root)?;
+
+    // 自动状态转换（在检查之前尝试）
+    let _ = auto_transition_state(project_root, &roadmap, &stuck);
 
     // 情况1: ROADMAP 不存在
     if !roadmap.exists {
@@ -41,21 +46,41 @@ Action Required:
 
     // 情况2: 所有任务完成
     if roadmap.complete {
+        // Stop hook: allow stopping by OMITTING "decision".
         return Ok(json!({
-            "decision": "allow",
-            "reason": format!(r#"🎉 ALL TASKS COMPLETED!
+            "systemMessage": format!(r#"🎉 ALL TASKS COMPLETED!
 
 Summary:
 - Total tasks: {}
 - Completed: {}
+- Skipped: {}
 
 The autonomous loop has finished successfully.
 You may now stop.
-"#, roadmap.total, roadmap.completed)
+"#, roadmap.total, roadmap.completed, roadmap.skipped)
         }));
     }
 
-    // 情况3: 系统卡住
+    // 情况3: 只剩阻塞任务（没有 pending/in_progress）→ 必须人工处理，不要继续循环
+    if roadmap.blocked > 0 && roadmap.pending == 0 && roadmap.in_progress == 0 {
+        return Ok(json!({
+            "decision": "block",
+            "reason": format!(r#"🚫 BLOCKED TASKS REMAIN
+
+There are blocked tasks in ROADMAP, and no pending/in-progress tasks to continue.
+
+Blocked: {}
+
+Actions:
+1. Resolve blockers and change [!] → [>] / [ ] for the task(s)
+2. Or explicitly skip: change [!] → [-] (only if acceptable)
+
+The autonomous loop cannot complete while [!] tasks remain.
+"#, roadmap.blocked)
+        }));
+    }
+
+    // 情况4: 系统卡住
     if stuck.stuck {
         return Ok(json!({
             "decision": "block",
@@ -66,17 +91,18 @@ Suggestion: {}
 
 Options:
 1. Try a COMPLETELY DIFFERENT approach
-2. Skip current task: Mark as [!] in ROADMAP
-3. Request human intervention
+2. Block current task: Mark as [!] in ROADMAP
+3. Skip current task: Mark as [-] in ROADMAP
+4. Request human intervention
 
 DO NOT simply retry the same approach.
 "#, stuck.reason, stuck.suggestion)
         }));
     }
 
-    // 情况4: 正常继续
+    // 情况5: 正常继续
     let progress_pct = if roadmap.total > 0 {
-        (roadmap.completed as f64 / roadmap.total as f64) * 100.0
+        ((roadmap.completed + roadmap.skipped) as f64 / roadmap.total as f64) * 100.0
     } else {
         0.0
     };
@@ -87,15 +113,17 @@ DO NOT simply retry the same approach.
 
 Progress: {}/{} ({:.1}%)
 ├── Completed: {}
+├── Skipped: {}
 ├── In Progress: {}
-└── Pending: {}
+├── Pending: {}
+└── Blocked: {}
 
 Next Task: {}
 
 Continue the loop. DO NOT STOP.
 "#,
-            roadmap.completed, roadmap.total, progress_pct,
-            roadmap.completed, roadmap.in_progress, roadmap.pending,
+            roadmap.completed + roadmap.skipped, roadmap.total, progress_pct,
+            roadmap.completed, roadmap.skipped, roadmap.in_progress, roadmap.pending, roadmap.blocked,
             roadmap.next_task.chars().take(80).collect::<String>()
         )
     }))
@@ -112,6 +140,8 @@ struct RoadmapStatus {
     pending: usize,
     in_progress: usize,
     completed: usize,
+    blocked: usize,
+    skipped: usize,
     total: usize,
     next_task: String,
 }
@@ -136,6 +166,8 @@ fn check_roadmap(project_root: &Path) -> Result<RoadmapStatus> {
                 pending: 0,
                 in_progress: 0,
                 completed: 0,
+                blocked: 0,
+                skipped: 0,
                 total: 0,
                 next_task: String::new(),
             })
@@ -146,6 +178,8 @@ fn check_roadmap(project_root: &Path) -> Result<RoadmapStatus> {
 
     let next_task = if let Some(task) = data.find_current_task() {
         task.line.clone()
+    } else if !data.blocked.is_empty() {
+        data.blocked[0].line.clone()
     } else {
         "Check ROADMAP".to_string()
     };
@@ -156,6 +190,8 @@ fn check_roadmap(project_root: &Path) -> Result<RoadmapStatus> {
         pending: data.pending.len(),
         in_progress: data.in_progress.len(),
         completed: data.completed.len(),
+        blocked: data.blocked.len(),
+        skipped: data.skipped.len(),
         total: data.total,
         next_task,
     })
@@ -169,11 +205,16 @@ fn check_stuck(project_root: &Path) -> Result<StuckStatus> {
     // 检查重试次数
     let task_id = memory.current_task.id.as_deref().unwrap_or("unknown");
     let retry_count = memory.current_task.retry_count;
+    let max_retries = if memory.current_task.max_retries == 0 {
+        DEFAULT_MAX_RETRIES
+    } else {
+        memory.current_task.max_retries
+    };
 
-    if retry_count >= MAX_RETRIES {
+    if retry_count >= max_retries {
         return Ok(StuckStatus {
             stuck: true,
-            reason: format!("Task {} exceeded {} retries", task_id, MAX_RETRIES),
+            reason: format!("Task {} exceeded {} retries", task_id, max_retries),
             suggestion: "Try different approach or skip task".to_string(),
         });
     }
@@ -186,6 +227,13 @@ fn check_stuck(project_root: &Path) -> Result<StuckStatus> {
         let task_errors: Vec<_> = errors
             .iter()
             .filter(|e| {
+                let kind = e
+                    .get("kind")
+                    .and_then(|k| k.as_str())
+                    .unwrap_or("command_failure");
+                if kind == "test_failure" {
+                    return false;
+                }
                 e.get("task")
                     .and_then(|t| t.as_str())
                     .map(|t| t == task_id)
@@ -211,7 +259,16 @@ fn check_stuck(project_root: &Path) -> Result<StuckStatus> {
             .iter()
             .rev()
             .take(MAX_CONSECUTIVE_ERRORS)
-            .filter(|e| e.get("resolution").is_none() || e["resolution"].is_null())
+            .filter(|e| {
+                let kind = e
+                    .get("kind")
+                    .and_then(|k| k.as_str())
+                    .unwrap_or("command_failure");
+                if kind == "test_failure" {
+                    return false;
+                }
+                e.get("resolution").is_none() || e["resolution"].is_null()
+            })
             .collect();
 
         if recent_unresolved.len() >= MAX_CONSECUTIVE_ERRORS {
@@ -228,6 +285,116 @@ fn check_stuck(project_root: &Path) -> Result<StuckStatus> {
         reason: String::new(),
         suggestion: String::new(),
     })
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// 自动状态转换
+// ═══════════════════════════════════════════════════════════════════
+
+/// 自动状态转换逻辑
+///
+/// 根据 ROADMAP 和任务状态自动转换状态机状态
+fn auto_transition_state(
+    project_root: &Path,
+    roadmap: &RoadmapStatus,
+    stuck: &StuckStatus,
+) -> Result<()> {
+    // 默认关闭：只有在用户显式创建过 `.claude/status/state.json` 后才启用自动状态转换，
+    // 避免在未授权情况下污染用户仓库历史（state commits/tags）。
+    let state_file = project_root.join(".claude/status/state.json");
+    if !state_file.exists() {
+        return Ok(());
+    }
+
+    // 如果不是 git 仓库，跳过
+    let state_machine = match GitStateMachine::new(project_root) {
+        Ok(sm) => sm,
+        Err(_) => return Ok(()), // 非 git 项目，跳过状态转换
+    };
+
+    let current_state = state_machine.current_state()?;
+
+    // 加载 memory.json 获取任务信息
+    let memory_file = project_root.join(".claude/status/memory.json");
+    let memory: Memory = read_json(&memory_file).unwrap_or_default();
+    let task_id = memory.current_task.id.clone();
+
+    // 检测场景并执行相应的状态转换
+
+    // 场景 1: ROADMAP 完成 → Completed
+    if roadmap.complete && current_state.state_id != StateId::Completed {
+        eprintln!("🎉 All tasks completed - transitioning to COMPLETED state");
+        let _ = state_machine.transition_to(
+            StateId::Completed,
+            task_id.as_deref(),
+            Some(serde_json::json!({
+                "completed_tasks": roadmap.completed,
+                "total_tasks": roadmap.total
+            })),
+        );
+        return Ok(());
+    }
+
+    // 场景 2: 只剩阻塞任务 → Blocked
+    if roadmap.blocked > 0
+        && roadmap.pending == 0
+        && roadmap.in_progress == 0
+        && current_state.state_id != StateId::Blocked
+    {
+        eprintln!("🚫 Blocked tasks remain - transitioning to BLOCKED state");
+        let _ = state_machine.transition_to(
+            StateId::Blocked,
+            task_id.as_deref(),
+            Some(serde_json::json!({
+                "blocked_tasks": roadmap.blocked,
+                "total_tasks": roadmap.total
+            })),
+        );
+        return Ok(());
+    }
+
+    // 场景 3: 系统卡住 → Blocked
+    if stuck.stuck && current_state.state_id != StateId::Blocked {
+        eprintln!("🚫 System stuck - transitioning to BLOCKED state");
+        let _ = state_machine.transition_to(
+            StateId::Blocked,
+            task_id.as_deref(),
+            Some(serde_json::json!({
+                "reason": &stuck.reason,
+                "suggestion": &stuck.suggestion
+            })),
+        );
+        return Ok(());
+    }
+
+    // 场景 4: 有任务进行中 + 当前状态是 Idle → Coding
+    if roadmap.in_progress > 0 && task_id.is_some() && current_state.state_id == StateId::Idle {
+        eprintln!("💻 Task started - transitioning to CODING state");
+        let _ = state_machine.transition_to(StateId::Coding, task_id.as_deref(), None);
+        return Ok(());
+    }
+
+    // 场景 5: 检测测试执行 (通过 error_history 判断)
+    let error_file = project_root.join(".claude/status/error_history.json");
+    let errors: Vec<Value> = read_json(&error_file).unwrap_or_default();
+
+    let recent_test_activity = errors.iter().rev().take(5).any(|e| {
+        e.get("error")
+            .and_then(|err| err.as_str())
+            .map(|s| s.contains("test") || s.contains("pytest") || s.contains("cargo test"))
+            .unwrap_or(false)
+    });
+
+    if recent_test_activity && current_state.state_id == StateId::Coding {
+        eprintln!("🧪 Test execution detected - transitioning to TESTING state");
+        let _ = state_machine.transition_to(StateId::Testing, task_id.as_deref(), None);
+        return Ok(());
+    }
+
+    // 场景 5: 测试失败（有未解决的测试错误）但不卡住 → 保持 Testing
+    // （这里不做状态转换，让 codex_review_gate 处理回滚）
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -262,8 +429,8 @@ mod tests {
         fs::write(temp.path().join(".claude/status/ROADMAP.md"), roadmap).unwrap();
 
         let result = run_loop_driver_hook(temp.path()).unwrap();
-        assert_eq!(result["decision"], "allow");
-        assert!(result["reason"]
+        assert!(result.get("decision").is_none());
+        assert!(result["systemMessage"]
             .as_str()
             .unwrap()
             .contains("ALL TASKS COMPLETED"));
