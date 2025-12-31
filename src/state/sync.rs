@@ -13,6 +13,17 @@ use crate::utils::{append_file, read_json, try_read_file, write_json};
 // 辅助函数
 // ═══════════════════════════════════════════════════════════════════
 
+fn normalize_task_status(status: &str) -> String {
+    let normalized = status.trim().to_uppercase().replace(' ', "_");
+    match normalized.as_str() {
+        "NOT_STARTED" => "PENDING".to_string(),
+        "INPROGRESS" => "IN_PROGRESS".to_string(),
+        "DONE" => "COMPLETED".to_string(),
+        "COMPLETE" => "COMPLETED".to_string(),
+        other => other.to_string(),
+    }
+}
+
 /// 记录决策日志
 fn log_decision(project_root: &Path, message: &str) -> Result<()> {
     let log_file = project_root.join(".claude/status/decisions.log");
@@ -146,7 +157,7 @@ pub fn sync_from_task_file(project_root: &Path, task_path: &Path) -> Result<bool
     if memory.current_task.id.as_ref() == Some(&task_id) {
         // 更新当前任务状态
         memory.current_task.name = Some(task_data.name.clone());
-        memory.current_task.status = task_data.status.clone();
+        memory.current_task.status = normalize_task_status(&task_data.status);
         memory.current_task.phase = task_data.phase.clone();
         memory.current_task.last_updated = Some(Utc::now().to_rfc3339());
 
