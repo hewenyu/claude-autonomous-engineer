@@ -16,6 +16,8 @@ use std::sync::{Arc, Mutex};
 pub struct GitStateMachine {
     /// Git 仓库
     repo: Repository,
+    /// Git 仓库工作目录（repo root）
+    repo_root: PathBuf,
     /// 项目根目录
     project_root: PathBuf,
     /// 状态文件路径
@@ -29,6 +31,11 @@ impl GitStateMachine {
     pub fn new(project_root: &Path) -> Result<Self> {
         let repo = Repository::open(project_root)
             .context("Failed to open git repository. Is this a git project?")?;
+
+        let repo_root = repo
+            .workdir()
+            .context("Bare git repositories are not supported")?
+            .to_path_buf();
 
         let state_file = project_root.join(".claude/status/state.json");
 
@@ -48,6 +55,7 @@ impl GitStateMachine {
 
         Ok(GitStateMachine {
             repo,
+            repo_root,
             project_root: project_root.to_path_buf(),
             state_file,
             hook_manager: Arc::new(Mutex::new(hook_manager)),
@@ -132,7 +140,7 @@ impl GitStateMachine {
 
         // 3. Git add
         let mut index = self.repo.index()?;
-        let relative_path = self.state_file.strip_prefix(&self.project_root)?;
+        let relative_path = self.state_file.strip_prefix(&self.repo_root)?;
         index.add_path(relative_path)?;
         index.write()?;
 
@@ -196,7 +204,7 @@ impl GitStateMachine {
         // 从 commit 中读取状态文件内容
         let tree = commit.tree()?;
 
-        let relative_path = self.state_file.strip_prefix(&self.project_root)?;
+        let relative_path = self.state_file.strip_prefix(&self.repo_root)?;
 
         let entry = tree
             .get_path(relative_path)
@@ -255,7 +263,7 @@ impl GitStateMachine {
     fn extract_state_from_commit(&self, commit: &Commit) -> Result<MachineState> {
         let tree = commit.tree()?;
 
-        let relative_path = self.state_file.strip_prefix(&self.project_root)?;
+        let relative_path = self.state_file.strip_prefix(&self.repo_root)?;
 
         let entry = tree.get_path(relative_path)?;
         let blob = self.repo.find_blob(entry.id())?;

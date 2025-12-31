@@ -245,10 +245,18 @@ mod tests {
 
     #[test]
     fn test_get_staged_diff() {
-        // 这个测试需要在 git 仓库中运行
-        // 仅作为示例
-        let project_root = std::env::current_dir().unwrap();
-        let result = get_staged_diff(&project_root);
-        assert!(result.is_ok());
+        let temp = tempfile::TempDir::new().unwrap();
+
+        // 初始化一个最小 git 仓库（不需要任何提交也能运行 git diff --cached）
+        let status = std::process::Command::new("git")
+            .args(["init"])
+            .current_dir(temp.path())
+            .status()
+            .unwrap();
+        assert!(status.success());
+
+        let result = get_staged_diff(temp.path()).unwrap();
+        // 空仓库/无暂存修改时，应返回占位文案或空 diff
+        assert!(!result.is_empty());
     }
 }

@@ -136,12 +136,14 @@ impl TaskStateTracker {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::TempDir;
 
     #[test]
     fn test_detect_transition() {
+        let temp = TempDir::new().unwrap();
         let mut tracker = TaskStateTracker {
             snapshots: HashMap::new(),
-            snapshots_file: std::path::PathBuf::from("/tmp/test.json"),
+            snapshots_file: temp.path().join("task_snapshots.json"),
         };
 
         let task = CurrentTask {
@@ -173,9 +175,10 @@ mod tests {
 
     #[test]
     fn test_classify_transition() {
+        let temp = TempDir::new().unwrap();
         let mut tracker = TaskStateTracker {
             snapshots: HashMap::new(),
-            snapshots_file: std::path::PathBuf::from("/tmp/test.json"),
+            snapshots_file: temp.path().join("task_snapshots.json"),
         };
 
         // 设置初始快照

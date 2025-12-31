@@ -390,22 +390,36 @@ impl ContextManager {
 
     /// 获取 Repository Map 上下文
     pub fn get_repo_map_context(&self) -> Result<String> {
-        let repo_map_file = self.project_root.join(".claude/repo_map/structure.md");
+        // 优先使用 TOON（更省 token），其次 Markdown
+        let candidates = [
+            (".claude/repo_map/structure.toon", "TOON"),
+            (".claude/repo_map/structure.md", "Markdown"),
+        ];
+
+        let mut selected: Option<(std::path::PathBuf, &'static str)> = None;
+
+        for (rel_path, label) in candidates {
+            let path = self.project_root.join(rel_path);
+            if path.exists() {
+                selected = Some((path, label));
+                break;
+            }
+        }
+
+        let Some((repo_map_file, label)) = selected else {
+            // 未生成则只给极短提示，避免每次注入都浪费 token
+            return Ok("\n## 🗺️ REPOSITORY MAP\n\n*Not generated. Run `claude-autonomous map` (recommended: default TOON).* \n".to_string());
+        };
 
         let content = match try_read_file(&repo_map_file) {
             Some(c) => c,
-            None => {
-                // 如果 Repository Map 不存在，返回提示信息
-                return Ok(format!(
-                    "\n## 🗺️ REPOSITORY MAP\n\n{}\n\n",
-                    "*Repository Map not generated yet. Run `claude-autonomous map` to create it.*"
-                ));
-            }
+            None => return Ok(String::new()),
         };
 
         // Repository Map 通常较大，限制在 15K tokens 左右
         Ok(format!(
-            "\n## 🗺️ REPOSITORY MAP (Code Skeleton)\n\n{}\n",
+            "\n## 🗺️ REPOSITORY MAP (Code Skeleton - {})\n```text\n{}\n```\n",
+            label,
             truncate_middle(&content, 15000)
         ))
     }
@@ -445,6 +459,12 @@ impl ContextManager {
 
     /// 获取状态机上下文（新增）
     pub fn get_state_machine_context(&self) -> Result<String> {
+        // 默认关闭：只有当用户显式启用（创建了 state.json）后才注入状态机上下文
+        let state_file = self.project_root.join(STATUS_DIR).join("state.json");
+        if !state_file.exists() {
+            return Ok(String::new());
+        }
+
         // 尝试加载状态机
         let state_machine = match GitStateMachine::new(&self.project_root) {
             Ok(sm) => sm,

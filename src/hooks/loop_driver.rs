@@ -247,6 +247,13 @@ fn auto_transition_state(
     roadmap: &RoadmapStatus,
     stuck: &StuckStatus,
 ) -> Result<()> {
+    // 默认关闭：只有在用户显式创建过 `.claude/status/state.json` 后才启用自动状态转换，
+    // 避免在未授权情况下污染用户仓库历史（state commits/tags）。
+    let state_file = project_root.join(".claude/status/state.json");
+    if !state_file.exists() {
+        return Ok(());
+    }
+
     // 如果不是 git 仓库，跳过
     let state_machine = match GitStateMachine::new(project_root) {
         Ok(sm) => sm,

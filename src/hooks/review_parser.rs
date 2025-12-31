@@ -58,7 +58,7 @@ impl ReviewResult {
             ));
         }
 
-        if self.verdict == Verdict::Fail && !self.state_transition_valid {
+        if !self.state_transition_valid {
             msg.push_str("\n⛔ State transition is invalid. Please fix issues before changing task status.\n");
         }
 
