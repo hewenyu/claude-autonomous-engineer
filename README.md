@@ -210,6 +210,48 @@ claude-autonomous status
 📍 Current Phase: Phase 1 - Core Authentication
 ```
 
+### 第四步（可选）：生成 Repository Map（代码骨架）
+
+Repository Map 会用 Tree-sitter 提取代码结构骨架（函数/结构体/impl 等），在上下文注入时显著减少 token 消耗，并降低“接口幻觉”风险。
+
+```bash
+# 默认输出（推荐）：.claude/repo_map/structure.toon
+claude-autonomous map
+
+# 输出 Markdown（更适合人读，但更长）
+claude-autonomous map --format markdown
+
+# 指定输出路径
+claude-autonomous map --output .claude/repo_map/structure.md --format markdown
+```
+
+说明：
+- `inject_state` 会优先读取 `.claude/repo_map/structure.toon`，不存在时再读取 `.claude/repo_map/structure.md`。
+- `.claude/repo_map/` 默认已加入 `.gitignore`（建议不要提交生成物）。
+
+### 第五步（可选）：Git 状态机（state）
+
+状态机用于把“长周期开发阶段”显式化（planning/coding/testing/reviewing/completed/blocked），并提供历史查询与回滚。
+
+```bash
+# 查看当前状态
+claude-autonomous state current
+
+# 手动创建一次状态转换（会写入 .claude/status/state.json，并创建一条 git commit + tag）
+claude-autonomous state transition planning --task-id TASK-001
+
+# 列出/可视化状态历史
+claude-autonomous state list
+claude-autonomous state graph --task-id TASK-001
+
+# 回滚到某个历史 tag（仅回滚 .claude/status/state.json）
+claude-autonomous state rollback state-20251231-120000-planning-TASK-001
+```
+
+注意：
+- 状态机是“显式启用”：只有当 `.claude/status/state.json` 存在时，`inject_state` 才会注入状态机上下文，`loop_driver` 才会尝试自动状态转换。
+- 为避免污染用户提交，状态转换会在 index 存在 staged changes 时拒绝执行（请先 commit/unstage）。
+
 ## 📚 实际使用场景
 
 ### 场景 1: 从零开始构建新功能
