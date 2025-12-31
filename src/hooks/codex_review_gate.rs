@@ -17,7 +17,9 @@ use crate::Memory;
 fn noop_pretooluse_output() -> Value {
     json!({
         "hookSpecificOutput": {
-            "hookEventName": "PreToolUse"
+            "for PreToolUse": {
+                "hookEventName": "PreToolUse"
+            }
         }
     })
 }
@@ -25,9 +27,11 @@ fn noop_pretooluse_output() -> Value {
 fn deny_pretooluse(reason: String) -> Value {
     json!({
         "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
-            "permissionDecision": "deny",
-            "permissionDecisionReason": reason
+            "for PreToolUse": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "deny",
+                "permissionDecisionReason": reason
+            }
         }
     })
 }
@@ -215,8 +219,11 @@ mod tests {
         });
 
         let result = run_codex_review_gate_hook(temp.path(), &input).unwrap();
-        assert_eq!(result["hookSpecificOutput"]["hookEventName"], "PreToolUse");
-        assert!(result["hookSpecificOutput"]
+        assert_eq!(
+            result["hookSpecificOutput"]["for PreToolUse"]["hookEventName"],
+            "PreToolUse"
+        );
+        assert!(result["hookSpecificOutput"]["for PreToolUse"]
             .get("permissionDecision")
             .is_none());
     }
@@ -331,8 +338,11 @@ mod tests {
             });
 
             let result = run_codex_review_gate_hook(temp.path(), &input).unwrap();
-            assert_eq!(result["hookSpecificOutput"]["permissionDecision"], "deny");
-            assert!(result["hookSpecificOutput"]["permissionDecisionReason"]
+            assert_eq!(
+                result["hookSpecificOutput"]["for PreToolUse"]["permissionDecision"],
+                "deny"
+            );
+            assert!(result["hookSpecificOutput"]["for PreToolUse"]["permissionDecisionReason"]
                 .as_str()
                 .unwrap()
                 .contains("commit blocked"));
@@ -365,8 +375,11 @@ mod tests {
             });
 
             let result = run_codex_review_gate_hook(temp.path(), &input).unwrap();
-            assert_eq!(result["hookSpecificOutput"]["hookEventName"], "PreToolUse");
-            assert!(result["hookSpecificOutput"]
+            assert_eq!(
+                result["hookSpecificOutput"]["for PreToolUse"]["hookEventName"],
+                "PreToolUse"
+            );
+            assert!(result["hookSpecificOutput"]["for PreToolUse"]
                 .get("permissionDecision")
                 .is_none());
         }

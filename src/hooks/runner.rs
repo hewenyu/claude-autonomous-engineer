@@ -83,7 +83,7 @@ mod tests {
         std::fs::create_dir_all(temp.path().join(".claude/status")).unwrap();
 
         let result = run_hook("inject_state", temp.path(), None).unwrap();
-        assert!(result["hookSpecificOutput"]["additionalContext"].is_string());
+        assert!(result["hookSpecificOutput"]["for UserPromptSubmit"]["additionalContext"].is_string());
     }
 
     #[test]
@@ -105,8 +105,11 @@ mod tests {
         });
 
         let result = run_hook("codex_review_gate", temp.path(), Some(&input)).unwrap();
-        assert_eq!(result["hookSpecificOutput"]["hookEventName"], "PreToolUse");
-        assert!(result["hookSpecificOutput"]
+        assert_eq!(
+            result["hookSpecificOutput"]["for PreToolUse"]["hookEventName"],
+            "PreToolUse"
+        );
+        assert!(result["hookSpecificOutput"]["for PreToolUse"]
             .get("permissionDecision")
             .is_none());
     }

@@ -17,7 +17,10 @@ pub fn run_inject_state_hook(project_root: &Path) -> Result<Value> {
 
     Ok(json!({
         "hookSpecificOutput": {
-            "additionalContext": full_context
+            "for UserPromptSubmit": {
+                "hookEventName": "UserPromptSubmit",
+                "additionalContext": full_context
+            }
         }
     }))
 }
@@ -34,9 +37,9 @@ mod tests {
         fs::create_dir_all(temp.path().join(".claude/status")).unwrap();
 
         let result = run_inject_state_hook(temp.path()).unwrap();
-        assert!(result["hookSpecificOutput"]["additionalContext"].is_string());
+        assert!(result["hookSpecificOutput"]["for UserPromptSubmit"]["additionalContext"].is_string());
 
-        let context = result["hookSpecificOutput"]["additionalContext"]
+        let context = result["hookSpecificOutput"]["for UserPromptSubmit"]["additionalContext"]
             .as_str()
             .unwrap();
         assert!(context.contains("AUTONOMOUS MODE"));
