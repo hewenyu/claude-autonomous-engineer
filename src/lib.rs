@@ -13,6 +13,7 @@ pub mod hooks;
 pub mod project;
 pub mod repo_map;
 pub mod state;
+pub mod state_machine;
 pub mod templates;
 pub mod utils;
 

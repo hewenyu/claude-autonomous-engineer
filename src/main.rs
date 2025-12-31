@@ -61,6 +61,46 @@ enum Commands {
         #[arg(short, long)]
         force: bool,
     },
+
+    /// 状态机管理（Git 驱动的状态快照）
+    #[command(subcommand)]
+    State(StateCommands),
+}
+
+/// 状态机子命令
+#[derive(Subcommand)]
+enum StateCommands {
+    /// 列出所有状态快照
+    List,
+
+    /// 显示当前状态
+    Current,
+
+    /// 回滚到指定 tag
+    Rollback {
+        /// Tag 名称（例如：state-20251231-120000-planning-TASK-001）
+        tag: String,
+    },
+
+    /// 显示状态转换图
+    Graph {
+        /// 仅显示指定任务的转换（可选）
+        #[arg(short, long)]
+        task_id: Option<String>,
+    },
+
+    /// 手动创建状态转换
+    Transition {
+        /// 目标状态（idle, planning, coding, testing, reviewing, completed, blocked）
+        state: String,
+
+        /// 任务 ID（可选）
+        #[arg(short, long)]
+        task_id: Option<String>,
+    },
+
+    /// 显示工作流帮助
+    Help,
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -396,5 +436,21 @@ fn main() -> Result<()> {
         Commands::Agents => list_agents(),
         Commands::Doctor => doctor(),
         Commands::Map { output, force } => generate_repo_map(output, force),
+        Commands::State(cmd) => {
+            use claude_autonomous::cli;
+
+            match cmd {
+                StateCommands::List => cli::list_states(),
+                StateCommands::Current => cli::show_current_state(),
+                StateCommands::Rollback { tag } => cli::rollback_to_tag(&tag),
+                StateCommands::Graph { task_id } => {
+                    cli::show_state_graph(task_id.as_deref())
+                }
+                StateCommands::Transition { state, task_id } => {
+                    cli::transition_to(&state, task_id.as_deref())
+                }
+                StateCommands::Help => cli::show_workflow_help(),
+            }
+        }
     }
 }
