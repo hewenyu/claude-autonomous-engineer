@@ -388,7 +388,7 @@ fn auto_transition_state(
         .rev()
         .take(10)
         .filter_map(|e| e.get("command").and_then(|c| c.as_str()))
-        .any(|cmd| is_test_command(cmd));
+        .any(is_test_command);
 
     let recent_test_activity =
         recent_test_activity || has_recent_test_activity_from_memory(&memory);

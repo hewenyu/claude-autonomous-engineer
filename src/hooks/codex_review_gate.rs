@@ -111,7 +111,7 @@ pub fn run_codex_review_gate_hook(project_root: &Path, input: &Value) -> Result<
             project_root,
             current_task,
             &previous_snapshot,
-            &transition_type,
+            transition_type,
         )?;
 
         execute_codex_review_simple(&context)
