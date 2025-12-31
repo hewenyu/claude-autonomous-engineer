@@ -1,7 +1,8 @@
 //! Hook 模块
 //!
-//! 实现 4 个 hook：inject_state, progress_sync, codex_review_gate, loop_driver
+//! 实现 5 个 hook：inject_state, progress_sync, codex_review_gate, loop_driver, claude_protocol
 
+pub mod claude_protocol;
 pub mod codex_review_gate;
 pub mod error_tracker;
 pub mod inject_state;
@@ -16,6 +17,7 @@ pub mod review_parser;
 pub mod state_tracker;
 
 // 重导出
+pub use claude_protocol::*;
 pub use codex_review_gate::*;
 pub use error_tracker::*;
 pub use inject_state::*;

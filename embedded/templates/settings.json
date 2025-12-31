@@ -1,5 +1,18 @@
 {
   "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "claude-autonomous hook claude_protocol",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+
     "UserPromptSubmit": [
       {
         "matcher": "*",

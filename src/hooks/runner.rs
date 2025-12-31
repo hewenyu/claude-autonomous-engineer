@@ -6,8 +6,8 @@ use std::io::{self, Read};
 use std::path::Path;
 
 use super::{
-    run_codex_review_gate_hook, run_error_tracker_hook, run_inject_state_hook,
-    run_loop_driver_hook, run_progress_sync_hook,
+    run_claude_protocol_hook, run_codex_review_gate_hook, run_error_tracker_hook,
+    run_inject_state_hook, run_loop_driver_hook, run_progress_sync_hook,
 };
 
 /// 运行指定的 hook
@@ -17,6 +17,8 @@ pub fn run_hook(hook_name: &str, project_root: &Path, input: Option<&Value>) -> 
     let default_input = json!({});
 
     match hook_name {
+        "claude_protocol" => run_claude_protocol_hook(),
+
         "inject_state" => run_inject_state_hook(project_root),
 
         "progress_sync" | "post_write_update" => {
@@ -75,6 +77,22 @@ pub fn print_hook_output(output: &Value) {
 mod tests {
     use super::*;
     use tempfile::TempDir;
+
+    #[test]
+    fn test_run_hook_claude_protocol() {
+        let temp = TempDir::new().unwrap();
+
+        let result = run_hook("claude_protocol", temp.path(), None).unwrap();
+        assert_eq!(
+            result["hookSpecificOutput"]["hookEventName"],
+            "SessionStart"
+        );
+        assert!(result["hookSpecificOutput"]["additionalContext"].is_string());
+        let context = result["hookSpecificOutput"]["additionalContext"]
+            .as_str()
+            .unwrap();
+        assert!(context.contains("Autonomous Engineering Orchestrator Protocol"));
+    }
 
     #[test]
     fn test_run_hook_inject_state() {

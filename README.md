@@ -325,11 +325,16 @@ Claude: "TASK-003: 添加集成测试..."
 
 | 命令 | 触发时机 | 作用 |
 |------|----------|------|
+| `hook claude_protocol` | SessionStart | 注入 CLAUDE.md 静态规范（自主工程协议） |
 | `hook inject_state` | UserPromptSubmit | 注入上下文到 Claude |
 | `hook progress_sync` | PostToolUse (Write/Edit) | 同步 Markdown 进度到 memory.json |
 | `hook codex_review_gate` | PreToolUse (Bash - git commit) | Git commit 前审查代码 |
 | `hook error_tracker` | PostToolUse (Bash) | 记录失败命令到 error_history.json，并递增 retry_count |
 | `hook loop_driver` | Stop | 检查是否还有任务，决定是否继续 |
+
+> 注意：Claude Code 会校验 hook 命令 stdout 的 JSON schema。  
+> 对于只做“副作用”的 hook（如 `progress_sync` / `error_tracker`），建议返回最小 no-op 结构，避免出现 `Hook JSON output validation failed`：
+> `{"hookSpecificOutput":{"for PostToolUse":{"hookEventName":"PostToolUse"}}}`
 
 ## 🏗️ 系统架构
 
@@ -339,6 +344,14 @@ Claude: "TASK-003: 添加集成测试..."
 ┌─────────────────────────────────────────────────────────────────┐
 │                       Claude Code Session                        │
 ├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  Session Start → [claude_protocol] → 注入 CLAUDE.md 静态规范     │
+│                     ↓                                            │
+│                  注入 Autonomous Engineering Protocol:           │
+│                  • Prime Directives (优先级规则)                  │
+│                  • Agent Swarm Protocol (Agent 协调)             │
+│                  • The Loop (自主循环流程)                        │
+│                  • Anti-Patterns (禁止行为)                       │
 │                                                                  │
 │  User Prompt → [inject_state] → Claude (with full context)      │
 │                     ↓                                            │
@@ -433,6 +446,14 @@ claude-autonomous root
 ```json
 {
   "hooks": {
+    "SessionStart": [{
+      "matcher": "*",
+      "hooks": [{
+        "type": "command",
+        "command": "claude-autonomous hook claude_protocol",
+        "timeout": 5
+      }]
+    }],
     "UserPromptSubmit": [{
       "matcher": "*",
       "hooks": [{
