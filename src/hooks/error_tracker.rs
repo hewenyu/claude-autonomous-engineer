@@ -13,63 +13,97 @@ use crate::utils::{read_json, write_json};
 
 /// Run error_tracker hook
 pub fn run_error_tracker_hook(project_root: &Path, input: &Value) -> Result<Value> {
-    // Only act on clear failures; otherwise no-op.
-    let Some(failure) = extract_failure(input) else {
-        return Ok(json!({
+    match extract_outcome(input) {
+        ExecutionOutcome::Unknown => Ok(json!({
             "status": "ok",
             "action": "none"
-        }));
-    };
+        })),
+        ExecutionOutcome::Success { command } => {
+            // Best-effort: if a command succeeds, mark matching unresolved errors as resolved.
+            let memory_file = project_root.join(".claude/status/memory.json");
+            let memory: Memory = read_json(&memory_file).unwrap_or_default();
+            let Some(task_id) = memory.current_task.id.clone() else {
+                return Ok(json!({
+                    "status": "ok",
+                    "action": "none"
+                }));
+            };
 
-    // Load memory (optional) to bind errors to the current task.
-    let memory_file = project_root.join(".claude/status/memory.json");
-    let mut memory: Memory = read_json(&memory_file).unwrap_or_default();
+            let resolved = resolve_matching_errors(project_root, &task_id, &command)?;
+            if resolved > 0 {
+                Ok(json!({
+                    "status": "ok",
+                    "action": "resolved",
+                    "resolved": resolved,
+                }))
+            } else {
+                Ok(json!({
+                    "status": "ok",
+                    "action": "none"
+                }))
+            }
+        }
+        ExecutionOutcome::Failure(failure) => {
+            // Load memory (optional) to bind errors to the current task.
+            let memory_file = project_root.join(".claude/status/memory.json");
+            let mut memory: Memory = read_json(&memory_file).unwrap_or_default();
 
-    let task_id = memory
-        .current_task
-        .id
-        .clone()
-        .unwrap_or_else(|| "unknown".to_string());
+            let task_id = memory
+                .current_task
+                .id
+                .clone()
+                .unwrap_or_else(|| "unknown".to_string());
 
-    // Append into error_history.json (create if missing).
-    let error_file = project_root.join(".claude/status/error_history.json");
-    let mut errors: Vec<Value> = read_json(&error_file).unwrap_or_default();
+            // Append into error_history.json (create if missing).
+            let error_file = project_root.join(".claude/status/error_history.json");
+            let mut errors: Vec<Value> = read_json(&error_file).unwrap_or_default();
 
-    errors.push(json!({
-        "task": task_id,
-        "kind": failure.kind,
-        "error": failure.message,
-        "attempted_fix": failure.attempted_fix,
-        "resolution": Value::Null,
-        "timestamp": Utc::now().to_rfc3339(),
-    }));
+            errors.push(json!({
+                "task": task_id,
+                "kind": failure.kind,
+                "command": failure.command,
+                "error": failure.message,
+                "attempted_fix": failure.attempted_fix,
+                "resolution": Value::Null,
+                "timestamp": Utc::now().to_rfc3339(),
+            }));
 
-    write_json(&error_file, &errors)?;
+            write_json(&error_file, &errors)?;
 
-    // Increment retry counter only for "command_failure" (not expected test failures).
-    if memory.current_task.id.is_some() && failure.increment_retry {
-        memory.current_task.retry_count = memory.current_task.retry_count.saturating_add(1);
-        memory.current_task.last_updated = Some(Utc::now().to_rfc3339());
-        let _ = write_json(&memory_file, &memory);
+            // Increment retry counter only for "command_failure" (not expected test failures).
+            if memory.current_task.id.is_some() && failure.increment_retry {
+                memory.current_task.retry_count = memory.current_task.retry_count.saturating_add(1);
+                memory.current_task.last_updated = Some(Utc::now().to_rfc3339());
+                let _ = write_json(&memory_file, &memory);
+            }
+
+            Ok(json!({
+                "status": "ok",
+                "action": "recorded",
+                "kind": failure.kind,
+                "incremented_retry": failure.increment_retry,
+            }))
+        }
     }
-
-    Ok(json!({
-        "status": "ok",
-        "action": "recorded",
-        "kind": failure.kind,
-        "incremented_retry": failure.increment_retry,
-    }))
 }
 
 #[derive(Debug)]
 struct FailureInfo {
     kind: &'static str,
+    command: Option<String>,
     message: String,
     attempted_fix: Option<String>,
     increment_retry: bool,
 }
 
-fn extract_failure(input: &Value) -> Option<FailureInfo> {
+#[derive(Debug)]
+enum ExecutionOutcome {
+    Success { command: String },
+    Failure(FailureInfo),
+    Unknown,
+}
+
+fn extract_outcome(input: &Value) -> ExecutionOutcome {
     let command = input
         .get("tool_input")
         .and_then(|t| t.get("command"))
@@ -81,11 +115,7 @@ fn extract_failure(input: &Value) -> Option<FailureInfo> {
     let exit_code = input
         .pointer("/tool_output/exit_code")
         .and_then(|v| v.as_i64())
-        .or_else(|| {
-            input
-                .pointer("/tool_result/exit_code")
-                .and_then(|v| v.as_i64())
-        })
+        .or_else(|| input.pointer("/tool_result/exit_code").and_then(|v| v.as_i64()))
         .or_else(|| input.pointer("/tool_output/code").and_then(|v| v.as_i64()))
         .or_else(|| input.pointer("/tool_result/code").and_then(|v| v.as_i64()))
         .or_else(|| input.get("exit_code").and_then(|v| v.as_i64()));
@@ -93,20 +123,16 @@ fn extract_failure(input: &Value) -> Option<FailureInfo> {
     let success = input
         .pointer("/tool_output/success")
         .and_then(|v| v.as_bool())
-        .or_else(|| {
-            input
-                .pointer("/tool_result/success")
-                .and_then(|v| v.as_bool())
-        })
+        .or_else(|| input.pointer("/tool_result/success").and_then(|v| v.as_bool()))
         .or_else(|| exit_code.map(|c| c == 0));
 
     if success == Some(true) {
-        return None;
+        return ExecutionOutcome::Success { command };
     }
 
     // If we can't confidently say it's a failure, do nothing (avoid false positives).
     if success.is_none() && exit_code.is_none() {
-        return None;
+        return ExecutionOutcome::Unknown;
     }
 
     let stderr = extract_text_field(input, &["tool_output", "stderr"])
@@ -128,15 +154,17 @@ fn extract_failure(input: &Value) -> Option<FailureInfo> {
 
     let kind = classify_failure_kind(&command, raw_message);
     let increment_retry = kind == "command_failure";
+    let command_truncated = if command.trim().is_empty() {
+        None
+    } else {
+        Some(truncate_for_log(command.trim(), 500))
+    };
 
-    Some(FailureInfo {
+    ExecutionOutcome::Failure(FailureInfo {
         kind,
+        command: command_truncated.clone(),
         message: truncate_for_log(raw_message, 2000),
-        attempted_fix: if command.is_empty() {
-            None
-        } else {
-            Some(format!("command: {}", truncate_for_log(&command, 500)))
-        },
+        attempted_fix: command_truncated.map(|c| format!("command: {}", c)),
         increment_retry,
     })
 }
@@ -183,11 +211,72 @@ fn extract_text_field(root: &Value, path: &[&str]) -> Option<String> {
     cur.as_str().map(|s| s.to_string())
 }
 
+fn clamp_to_char_boundary(s: &str, mut idx: usize) -> usize {
+    idx = idx.min(s.len());
+    while idx > 0 && !s.is_char_boundary(idx) {
+        idx -= 1;
+    }
+    idx
+}
+
 fn truncate_for_log(s: &str, max: usize) -> String {
     if s.len() <= max {
         return s.to_string();
     }
-    format!("{}…(truncated)", &s[..max.min(s.len())])
+    let cut = clamp_to_char_boundary(s, max);
+    format!("{}…(truncated)", &s[..cut])
+}
+
+fn resolve_matching_errors(project_root: &Path, task_id: &str, command: &str) -> Result<usize> {
+    let cmd = command.trim();
+    if cmd.is_empty() {
+        return Ok(0);
+    }
+
+    let cmd_key = truncate_for_log(cmd, 500);
+
+    let error_file = project_root.join(".claude/status/error_history.json");
+    let mut errors: Vec<Value> = read_json(&error_file).unwrap_or_default();
+
+    let mut resolved = 0usize;
+    for err in errors.iter_mut().rev() {
+        let unresolved = err.get("resolution").is_none() || err["resolution"].is_null();
+        if !unresolved {
+            continue;
+        }
+
+        let err_task = err.get("task").and_then(|t| t.as_str()).unwrap_or("");
+        if err_task != task_id {
+            continue;
+        }
+
+        let matches_command = err
+            .get("command")
+            .and_then(|c| c.as_str())
+            .map(|c| c == cmd_key)
+            .unwrap_or(false)
+            || err
+                .get("attempted_fix")
+                .and_then(|a| a.as_str())
+                .map(|a| a.contains(&cmd_key))
+                .unwrap_or(false);
+
+        if !matches_command {
+            continue;
+        }
+
+        err["resolution"] = json!({
+            "message": format!("command succeeded: {}", cmd_key),
+            "timestamp": Utc::now().to_rfc3339(),
+        });
+        resolved += 1;
+    }
+
+    if resolved > 0 {
+        write_json(&error_file, &errors)?;
+    }
+
+    Ok(resolved)
 }
 
 #[cfg(test)]
@@ -201,7 +290,10 @@ mod tests {
             "tool_input": { "command": "echo ok" },
             "tool_output": { "exit_code": 0, "stdout": "ok" }
         });
-        assert!(extract_failure(&input).is_none());
+        assert!(matches!(
+            extract_outcome(&input),
+            ExecutionOutcome::Success { .. }
+        ));
     }
 
     #[test]
@@ -210,7 +302,9 @@ mod tests {
             "tool_input": { "command": "false" },
             "tool_output": { "exit_code": 1, "stderr": "boom" }
         });
-        let failure = extract_failure(&input).unwrap();
+        let ExecutionOutcome::Failure(failure) = extract_outcome(&input) else {
+            panic!("expected Failure outcome");
+        };
         assert_eq!(failure.kind, "command_failure");
         assert!(failure.increment_retry);
     }
@@ -239,5 +333,42 @@ mod tests {
             read_json(&temp.path().join(".claude/status/error_history.json")).unwrap();
         assert_eq!(errors.len(), 1);
         assert_eq!(errors[0]["task"], "TASK-001");
+    }
+
+    #[test]
+    fn test_run_error_tracker_resolves_matching_error_on_success() {
+        let temp = TempDir::new().unwrap();
+        std::fs::create_dir_all(temp.path().join(".claude/status")).unwrap();
+
+        std::fs::write(
+            temp.path().join(".claude/status/memory.json"),
+            r#"{ "current_task": { "id": "TASK-001", "status": "IN_PROGRESS", "retry_count": 0, "max_retries": 5 } }"#,
+        )
+        .unwrap();
+
+        let fail_input = json!({
+            "tool_input": { "command": "cargo build" },
+            "tool_output": { "exit_code": 101, "stderr": "error: could not compile" }
+        });
+        run_error_tracker_hook(temp.path(), &fail_input).unwrap();
+
+        let success_input = json!({
+            "tool_input": { "command": "cargo build" },
+            "tool_output": { "exit_code": 0, "stdout": "Finished" }
+        });
+        let result = run_error_tracker_hook(temp.path(), &success_input).unwrap();
+        assert_eq!(result["action"], "resolved");
+
+        let errors: Vec<Value> =
+            read_json(&temp.path().join(".claude/status/error_history.json")).unwrap();
+        assert_eq!(errors.len(), 1);
+        assert!(errors[0]["resolution"].is_object());
+    }
+
+    #[test]
+    fn test_truncate_for_log_utf8_safe() {
+        let s = "中文🙂".repeat(100);
+        let t = truncate_for_log(&s, 10);
+        assert!(t.contains("truncated"));
     }
 }
