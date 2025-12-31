@@ -169,6 +169,7 @@ mod tests {
             max_retries: 5,
             acceptance_progress: None,
             last_updated: None,
+            extra: Default::default(),
         };
 
         // 第一次，不算转换
@@ -212,6 +213,7 @@ mod tests {
             max_retries: 5,
             acceptance_progress: None,
             last_updated: None,
+            extra: Default::default(),
         };
 
         assert_eq!(

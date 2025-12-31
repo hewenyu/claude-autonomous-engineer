@@ -27,13 +27,13 @@ pub fn run_codex_review_gate_hook(project_root: &Path, input: &Value) -> Result<
         }));
     }
 
-    println!("🔍 Codex Review Gate: Analyzing commit...");
+    eprintln!("🔍 Codex Review Gate: Analyzing commit...");
 
     // 获取暂存文件
     let staged_files = match get_staged_files(Some(project_root)) {
         Ok(files) => files,
         Err(_) => {
-            println!("   ⚠️  No staged files found, allowing commit");
+            eprintln!("   ⚠️  No staged files found, allowing commit");
             return Ok(json!({
                 "decision": "allow"
             }));
@@ -41,7 +41,7 @@ pub fn run_codex_review_gate_hook(project_root: &Path, input: &Value) -> Result<
     };
 
     if staged_files.is_empty() {
-        println!("   ⚠️  No staged files, allowing commit");
+        eprintln!("   ⚠️  No staged files, allowing commit");
         return Ok(json!({
             "decision": "allow"
         }));
@@ -54,7 +54,7 @@ pub fn run_codex_review_gate_hook(project_root: &Path, input: &Value) -> Result<
 
     // 如果没有当前任务，使用常规审查
     if current_task.id.is_none() {
-        println!("   📝 No current task, skipping review");
+        eprintln!("   📝 No current task, skipping review");
         return Ok(json!({
             "decision": "allow",
             "reason": "No active task"
@@ -75,7 +75,7 @@ pub fn run_codex_review_gate_hook(project_root: &Path, input: &Value) -> Result<
     let review_result = if is_transition {
         // 深度审查模式
         let transition_type = state_tracker.classify_transition(current_task);
-        println!("   ⚠️  State Transition Detected: {:?}", transition_type);
+        eprintln!("   ⚠️  State Transition Detected: {:?}", transition_type);
 
         let previous_snapshot = state_tracker
             .get_previous_snapshot(current_task.id.as_ref().unwrap())
@@ -91,7 +91,7 @@ pub fn run_codex_review_gate_hook(project_root: &Path, input: &Value) -> Result<
         execute_codex_review_simple(&context)
     } else {
         // 常规审查模式
-        println!("   📝 Regular Review Mode");
+        eprintln!("   📝 Regular Review Mode");
 
         let context = ReviewContext::build_regular(project_root, current_task)?;
 
@@ -105,19 +105,19 @@ pub fn run_codex_review_gate_hook(project_root: &Path, input: &Value) -> Result<
                 Verdict::Pass => {
                     if is_transition && !result.state_transition_valid {
                         // 深度审查时，即使 PASS 也要检查状态转换有效性
-                        println!("   ❌ State transition is invalid");
+                        eprintln!("   ❌ State transition is invalid");
                         return Ok(json!({
                             "decision": "block",
                             "message": result.format_error_message()
                         }));
                     }
 
-                    println!("   ✅ Review PASSED");
+                    eprintln!("   ✅ Review PASSED");
 
                     // 更新状态快照：状态转换时更新；首次看到任务也要初始化一份
                     if is_transition || !has_snapshot {
                         state_tracker.update_snapshot(current_task)?;
-                        println!("   💾 State snapshot updated");
+                        eprintln!("   💾 State snapshot updated");
                     }
 
                     Ok(json!({
@@ -126,14 +126,14 @@ pub fn run_codex_review_gate_hook(project_root: &Path, input: &Value) -> Result<
                     }))
                 }
                 Verdict::Warn => {
-                    println!("   ⚠️  Review WARNINGS:");
+                    eprintln!("   ⚠️  Review WARNINGS:");
                     for issue in &result.issues {
-                        println!("      [WARN] {}", issue.description);
+                        eprintln!("      [WARN] {}", issue.description);
                     }
                     // 警告不阻塞提交
                     if !has_snapshot {
                         state_tracker.update_snapshot(current_task)?;
-                        println!("   💾 State snapshot updated");
+                        eprintln!("   💾 State snapshot updated");
                     }
                     Ok(json!({
                         "decision": "allow",
@@ -141,7 +141,7 @@ pub fn run_codex_review_gate_hook(project_root: &Path, input: &Value) -> Result<
                     }))
                 }
                 Verdict::Fail => {
-                    println!("   ❌ Review FAILED");
+                    eprintln!("   ❌ Review FAILED");
                     Ok(json!({
                         "decision": "block",
                         "message": result.format_error_message()

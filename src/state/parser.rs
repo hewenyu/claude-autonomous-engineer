@@ -21,7 +21,8 @@ lazy_static! {
     static ref TASK_SKIPPED: Regex = Regex::new(r"^-\s*\[-\]").unwrap();
 
     // 任务 ID 正则
-    static ref TASK_ID: Regex = Regex::new(r"(TASK-\d+|#\d+)").unwrap();
+    // TASK IDs may include suffixes for sub-tasks (e.g. TASK-004B, TASK-001-SUBTASK-A)
+    static ref TASK_ID: Regex = Regex::new(r"(TASK-\d+[A-Za-z0-9-]*|#\d+)").unwrap();
 
     // 阶段正则 - 捕获整个 "Phase N" 或只是数字
     static ref CURRENT_PHASE: Regex = Regex::new(r"##\s*Current[:\s]+(Phase\s+\d+|[A-Za-z0-9\s]+)").unwrap();

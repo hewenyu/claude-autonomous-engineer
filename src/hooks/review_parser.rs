@@ -93,7 +93,7 @@ pub fn parse_review_output(output: &str, mode: ReviewMode) -> Result<ReviewResul
         };
     } else {
         // 如果没有找到 VERDICT，默认为 FAIL
-        println!("⚠️  Warning: No VERDICT found in codex output, defaulting to FAIL");
+        eprintln!("⚠️  Warning: No VERDICT found in codex output, defaulting to FAIL");
     }
 
     // 深度审查模式下解析 STATE_TRANSITION_VALID
@@ -102,7 +102,7 @@ pub fn parse_review_output(output: &str, mode: ReviewMode) -> Result<ReviewResul
             state_transition_valid = captures[1].to_uppercase() == "YES";
         } else {
             // 如果没有找到，默认为 false
-            println!("⚠️  Warning: No STATE_TRANSITION_VALID found in deep review output");
+            eprintln!("⚠️  Warning: No STATE_TRANSITION_VALID found in deep review output");
         }
     }
 

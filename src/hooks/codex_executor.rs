@@ -16,7 +16,7 @@ pub fn execute_codex_review(context: &ReviewContext) -> Result<ReviewResult> {
 
 /// 简化版本：直接使用 wait_with_output（实际使用此版本）
 pub fn execute_codex_review_simple(context: &ReviewContext) -> Result<ReviewResult> {
-    println!("🤖 Invoking codex review...");
+    eprintln!("🤖 Invoking codex review...");
 
     let mut child = Command::new("codex")
         .arg("review")

@@ -60,45 +60,52 @@ pub fn sync_from_roadmap(project_root: &Path, roadmap_path: &Path) -> Result<boo
     memory.progress.current_phase = roadmap_data.current_phase.clone();
     memory.progress.last_synced = Some(Utc::now().to_rfc3339());
 
-    // 确定当前任务
+    // 确定当前任务（并在同一任务 ID 下也同步状态变化）
     if let Some(current) = roadmap_data.find_current_task() {
         if let Some(task_id) = &current.id {
-            // 检查是否是新任务
-            if memory.current_task.id.as_ref() != Some(task_id) {
-                // 任务变更，更新 current_task
-                let status = if roadmap_data
-                    .in_progress
-                    .iter()
-                    .any(|t| t.id.as_ref() == Some(task_id))
-                {
-                    "IN_PROGRESS"
-                } else {
-                    "PENDING"
-                };
+            let in_progress = roadmap_data
+                .in_progress
+                .iter()
+                .any(|t| t.id.as_ref() == Some(task_id));
 
+            let status = if in_progress {
+                "IN_PROGRESS"
+            } else {
+                "PENDING"
+            };
+
+            let task_changed = memory.current_task.id.as_ref() != Some(task_id);
+            let status_changed = memory.current_task.status != status;
+
+            if task_changed {
                 memory.current_task.id = Some(task_id.clone());
-                memory.current_task.name = Some(
-                    current
-                        .line
-                        .replace("- [ ]", "")
-                        .replace("- [>]", "")
-                        .trim()
-                        .chars()
-                        .take(100)
-                        .collect(),
-                );
-                memory.current_task.status = status.to_string();
-                memory.current_task.started_at = if status == "IN_PROGRESS" {
-                    Some(Utc::now().to_rfc3339())
-                } else {
-                    None
-                };
                 memory.current_task.retry_count = 0;
-
+                memory.current_task.started_at = None;
                 log_decision(
                     project_root,
                     &format!("SYNC: Current task updated to {}", task_id),
                 )?;
+            }
+
+            // 始终同步名称/状态，避免仅切换 [ ] ↔ [>] 时 memory.json 不更新
+            memory.current_task.name = Some(
+                current
+                    .line
+                    .replace("- [ ]", "")
+                    .replace("- [>]", "")
+                    .replace("- [~]", "")
+                    .trim()
+                    .chars()
+                    .take(100)
+                    .collect(),
+            );
+
+            if task_changed || status_changed {
+                memory.current_task.status = status.to_string();
+
+                if status == "IN_PROGRESS" && memory.current_task.started_at.is_none() {
+                    memory.current_task.started_at = Some(Utc::now().to_rfc3339());
+                }
             }
         }
     }
@@ -129,7 +136,7 @@ pub fn sync_from_task_file(project_root: &Path, task_path: &Path) -> Result<bool
     // 从文件名提取任务 ID
     let filename = task_path.file_name().and_then(|n| n.to_str()).unwrap_or("");
 
-    let task_id_pattern = regex::Regex::new(r"(TASK-\d+)").unwrap();
+    let task_id_pattern = regex::Regex::new(r"(TASK-\d+[A-Za-z0-9-]*)").unwrap();
     let task_id = match task_id_pattern.captures(filename) {
         Some(caps) => caps.get(1).map(|m| m.as_str().to_string()),
         None => return Ok(false),

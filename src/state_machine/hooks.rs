@@ -105,7 +105,7 @@ impl TransitionHookManager {
             match decision {
                 HookDecision::Block(reason) => {
                     // 遇到 Block，立即停止并返回
-                    println!(
+                    eprintln!(
                         "🚫 PreTransition hook '{}' blocked transition: {}",
                         hook.name(),
                         reason
@@ -114,7 +114,7 @@ impl TransitionHookManager {
                 }
                 HookDecision::Modify(new_state) => {
                     // 修改目标状态
-                    println!(
+                    eprintln!(
                         "🔄 PreTransition hook '{}' modified target state to {}",
                         hook.name(),
                         new_state.as_str()
