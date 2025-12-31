@@ -52,7 +52,24 @@ Action Required:
         }));
     }
 
-    // 情况2: 所有任务完成
+    // 情况2: ROADMAP 为空（未初始化）
+    if roadmap.total == 0 {
+        return Ok(json!({
+            "decision": "block",
+            "reason": r#"📋 ROADMAP EMPTY
+
+The ROADMAP exists but has no tasks defined yet.
+
+Actions:
+1. Use project-architect-supervisor to generate tasks
+2. Or manually add tasks to .claude/status/ROADMAP.md
+
+Cannot run autonomous loop without tasks in ROADMAP.
+"#
+        }));
+    }
+
+    // 情况3: 所有任务完成
     if roadmap.complete {
         // Stop hook: allow stopping by OMITTING "decision".
         return Ok(json!({
@@ -69,7 +86,7 @@ You may now stop.
         }));
     }
 
-    // 情况3: 只剩阻塞任务（没有 pending/in_progress）→ 必须人工处理，不要继续循环
+    // 情况4: 只剩阻塞任务（没有 pending/in_progress）→ 必须人工处理，不要继续循环
     if roadmap.blocked > 0 && roadmap.pending == 0 && roadmap.in_progress == 0 {
         return Ok(json!({
             "decision": "block",
@@ -88,7 +105,7 @@ The autonomous loop cannot complete while [!] tasks remain.
         }));
     }
 
-    // 情况4: 系统卡住
+    // 情况5: 系统卡住
     if stuck.stuck {
         return Ok(json!({
             "decision": "block",
@@ -108,7 +125,7 @@ DO NOT simply retry the same approach.
         }));
     }
 
-    // 情况5: 正常继续
+    // 情况6: 正常继续
     let progress_pct = if roadmap.total > 0 {
         ((roadmap.completed + roadmap.skipped) as f64 / roadmap.total as f64) * 100.0
     } else {
