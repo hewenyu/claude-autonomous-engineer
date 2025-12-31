@@ -29,7 +29,7 @@ lazy_static! {
 
     // 状态正则
     // Status line: allow multi-word values (e.g. "In Progress", "PENDING_REVIEW")
-    static ref STATUS_LINE: Regex = Regex::new(r"##\s*Status[:\s]+(.+)$").unwrap();
+    static ref STATUS_LINE: Regex = Regex::new(r"(?m)^##\s*Status[:\s]+(.+)$").unwrap();
 
     // 任务标题正则
     static ref TASK_TITLE: Regex = Regex::new(r"^#\s*(?:TASK-\d+[:\s]+)?(.+)$").unwrap();
@@ -322,6 +322,6 @@ mod tests {
         let phase = parse_phase_plan(content).unwrap().unwrap();
         assert_eq!(phase.phase_num, "1");
         assert_eq!(phase.phase_name, "Foundation");
-        assert_eq!(phase.status, "In");
+        assert_eq!(phase.status, "In Progress");
     }
 }
