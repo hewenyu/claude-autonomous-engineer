@@ -384,6 +384,32 @@ impl ContextManager {
     }
 
     // ═══════════════════════════════════════════════════════════════════
+    // Layer 4.5: Repository Map (代码骨架)
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// 获取 Repository Map 上下文
+    pub fn get_repo_map_context(&self) -> Result<String> {
+        let repo_map_file = self.project_root.join(".claude/repo_map/structure.md");
+
+        let content = match try_read_file(&repo_map_file) {
+            Some(c) => c,
+            None => {
+                // 如果 Repository Map 不存在，返回提示信息
+                return Ok(format!(
+                    "\n## 🗺️ REPOSITORY MAP\n\n{}\n\n",
+                    "*Repository Map not generated yet. Run `claude-autonomous map` to create it.*"
+                ));
+            }
+        };
+
+        // Repository Map 通常较大，限制在 15K tokens 左右
+        Ok(format!(
+            "\n## 🗺️ REPOSITORY MAP (Code Skeleton)\n\n{}\n",
+            truncate_middle(&content, 15000)
+        ))
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
     // Layer 5-8: 其他上下文
     // ═══════════════════════════════════════════════════════════════════
 
@@ -427,6 +453,7 @@ impl ContextManager {
             self.get_memory_context()?,
             self.get_roadmap_context(false)?,
             self.get_current_task_spec()?,
+            self.get_repo_map_context()?, // 新增：Repository Map
             self.get_error_context(None)?,
             self.get_contract_context()?,
             self.get_git_context(10)?,

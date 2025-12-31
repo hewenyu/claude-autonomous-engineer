@@ -11,6 +11,7 @@ pub mod cli;
 pub mod context;
 pub mod hooks;
 pub mod project;
+pub mod repo_map;
 pub mod state;
 pub mod templates;
 pub mod utils;

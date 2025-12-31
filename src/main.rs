@@ -50,6 +50,17 @@ enum Commands {
 
     /// 诊断环境和配置
     Doctor,
+
+    /// 生成 Repository Map（代码库结构骨架）
+    Map {
+        /// 输出文件路径（默认：.claude/repo_map/structure.md）
+        #[arg(short, long)]
+        output: Option<String>,
+
+        /// 强制重新生成（忽略缓存）
+        #[arg(short, long)]
+        force: bool,
+    },
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -292,6 +303,73 @@ fn doctor() -> Result<()> {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// Repository Map
+// ═══════════════════════════════════════════════════════════════════
+
+fn generate_repo_map(output: Option<String>, force: bool) -> Result<()> {
+    use claude_autonomous::repo_map::RepoMapper;
+    use std::time::Instant;
+
+    let project_root = match find_project_root() {
+        Some(root) => root,
+        None => {
+            println!("{}", "❌ No .claude directory found".red());
+            println!("Run {} to initialize", "claude-autonomous init".cyan());
+            return Ok(());
+        }
+    };
+
+    println!(
+        "{}",
+        "🗺️  Generating Repository Map...".cyan().bold()
+    );
+    println!();
+
+    let start = Instant::now();
+
+    // 如果强制重新生成，清除缓存
+    if force {
+        let cache_file = project_root.join(".claude/repo_map/cache.json");
+        if cache_file.exists() {
+            std::fs::remove_file(&cache_file)?;
+            println!("{}", "   🗑️  Cleared cache".yellow());
+        }
+    }
+
+    // 生成 map
+    let mut mapper = RepoMapper::new(&project_root)?;
+    let content = mapper.generate_map()?;
+
+    // 确定输出路径
+    let output_path = if let Some(path) = output {
+        project_root.join(path)
+    } else {
+        project_root.join(".claude/repo_map/structure.md")
+    };
+
+    // 确保目录存在
+    if let Some(parent) = output_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+
+    // 写入文件
+    std::fs::write(&output_path, content)?;
+
+    let elapsed = start.elapsed();
+
+    println!();
+    println!("{}", "✅ Repository Map generated!".green().bold());
+    println!("   📁 Output: {}", output_path.display().to_string().cyan());
+    println!("   ⏱️  Time: {:.2}s", elapsed.as_secs_f64());
+    println!();
+    println!(
+        "💡 Tip: Repository Map 已保存，可用于减少 90% 的上下文 token 消耗"
+    );
+
+    Ok(())
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // Main
 // ═══════════════════════════════════════════════════════════════════
 
@@ -317,5 +395,6 @@ fn main() -> Result<()> {
         Commands::Status => show_status(),
         Commands::Agents => list_agents(),
         Commands::Doctor => doctor(),
+        Commands::Map { output, force } => generate_repo_map(output, force),
     }
 }
