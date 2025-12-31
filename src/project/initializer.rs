@@ -46,7 +46,7 @@ pub fn init_project(project_root: &Path, name: Option<&str>, force: bool) -> Res
     println!("\nNext steps:");
     println!(
         "  1. Edit {} to add project instructions",
-        ".claude/CLAUDE.md".cyan()
+        "CLAUDE.md".cyan()
     );
     println!(
         "  2. Review {} for hook configuration",
@@ -159,7 +159,8 @@ Use the following status markers:
 - `[ ]` - Pending
 - `[>]` - In Progress
 - `[x]` - Completed
-- `[!]` - Blocked
+- `[!]` - Blocked (requires intervention; blocks overall completion)
+- `[-]` - Skipped (explicitly skipped; does not block overall completion)
 "#;
     let roadmap_path = project_root.join(".claude/status/ROADMAP.md");
     fs::write(&roadmap_path, roadmap_template)?;

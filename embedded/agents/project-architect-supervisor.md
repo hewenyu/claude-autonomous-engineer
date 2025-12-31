@@ -17,14 +17,14 @@ Your outputs are **not just documentation** - they are **machine-readable specif
 ┌─────────────────────────────────────────────────────────────────┐
 │  YOUR OUTPUTS                    CONSUMED BY                    │
 ├─────────────────────────────────────────────────────────────────┤
-│  ROADMAP.md          →    loop_driver.py (task completion)      │
-│                      →    inject_state.py (progress display)    │
-│                      →    progress_sync.py (auto-sync)          │
+│  ROADMAP.md          →    loop_driver hook (task completion)    │
+│                      →    inject_state hook (progress display)  │
+│                      →    progress_sync hook (auto-sync)        │
 ├─────────────────────────────────────────────────────────────────┤
 │  api_contract.yaml   →    code-executor (implementation)        │
-│                      →    codex_review_gate.py (validation)     │
+│                      →    codex_review_gate hook (validation)   │
 ├─────────────────────────────────────────────────────────────────┤
-│  TASK-xxx.md         →    context_manager.py (task context)     │
+│  TASK-xxx.md         →    context_manager (task context)        │
 │                      →    code-executor (requirements)          │
 ├─────────────────────────────────────────────────────────────────┤
 │  PHASE_PLAN.md       →    progress tracking                     │
@@ -75,6 +75,7 @@ Task Status Legend:
 - [>] = In Progress  
 - [x] = Completed
 - [!] = Blocked
+- [-] = Skipped (explicitly skipped; does not block overall completion)
 -->
 ```
 
@@ -82,6 +83,8 @@ Task Status Legend:
 - Use `- [ ]` for pending (loop_driver checks this!)
 - Use `- [>]` for in progress
 - Use `- [x]` for completed
+- Use `- [!]` for blocked (blocks overall completion)
+- Use `- [-]` for skipped (does not block overall completion)
 - Always include `TASK-NNN:` prefix for task identification
 
 ### 2. api_contract.yaml (The Law for code-executor)
@@ -153,7 +156,7 @@ errors:
 
 **⚠️ CONTRACT IS LAW:**
 - code-executor will match signatures **exactly**
-- codex_review_gate.py validates against this
+- codex_review_gate hook validates against this
 - Any ambiguity = implementation confusion
 
 ### 3. TASK-xxx.md (Task Specification)
@@ -250,7 +253,7 @@ From api_contract.yaml:
         ↓
 7. Generate TASK-xxx.md for each task
         ↓
-8. Initialize memory.json (or let progress_sync.py do it)
+8. Initialize memory.json (or let progress_sync hook do it)
         ↓
 9. Present plan and wait for confirmation
 ```

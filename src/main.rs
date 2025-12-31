@@ -187,7 +187,7 @@ fn show_status() -> Result<()> {
         match parse_roadmap(&content) {
             Ok(data) => {
                 let pct = if data.total > 0 {
-                    (data.completed.len() as f64 / data.total as f64) * 100.0
+                    ((data.completed.len() + data.skipped.len()) as f64 / data.total as f64) * 100.0
                 } else {
                     0.0
                 };
@@ -202,6 +202,7 @@ fn show_status() -> Result<()> {
                 );
                 println!("   {} Pending: {}", "○".white(), data.pending.len());
                 println!("   {} Blocked: {}", "!".red(), data.blocked.len());
+                println!("   {} Skipped: {}", "−".blue(), data.skipped.len());
                 println!("   Total: {} ({:.1}%)", data.total, pct);
 
                 if let Some(phase) = &data.current_phase {

@@ -18,6 +18,7 @@ lazy_static! {
     static ref TASK_IN_PROGRESS: Regex = Regex::new(r"^-\s*\[(>|~)\]").unwrap();
     static ref TASK_COMPLETED: Regex = Regex::new(r"^-\s*\[[xX]\]").unwrap();
     static ref TASK_BLOCKED: Regex = Regex::new(r"^-\s*\[!\]").unwrap();
+    static ref TASK_SKIPPED: Regex = Regex::new(r"^-\s*\[-\]").unwrap();
 
     // 任务 ID 正则
     static ref TASK_ID: Regex = Regex::new(r"(TASK-\d+|#\d+)").unwrap();
@@ -27,7 +28,8 @@ lazy_static! {
     static ref PHASE_HEADER: Regex = Regex::new(r"#\s*Phase\s*(\d+)[:\s]+(.+)").unwrap();
 
     // 状态正则
-    static ref STATUS_LINE: Regex = Regex::new(r"##\s*Status[:\s]+(\w+)").unwrap();
+    // Status line: allow multi-word values (e.g. "In Progress", "PENDING_REVIEW")
+    static ref STATUS_LINE: Regex = Regex::new(r"##\s*Status[:\s]+(.+)$").unwrap();
 
     // 任务标题正则
     static ref TASK_TITLE: Regex = Regex::new(r"^#\s*(?:TASK-\d+[:\s]+)?(.+)$").unwrap();
@@ -45,6 +47,7 @@ pub fn parse_roadmap(content: &str) -> Result<RoadmapData> {
     let mut in_progress = Vec::new();
     let mut completed = Vec::new();
     let mut blocked = Vec::new();
+    let mut skipped = Vec::new();
 
     for line in content.lines() {
         let trimmed = line.trim();
@@ -68,6 +71,8 @@ pub fn parse_roadmap(content: &str) -> Result<RoadmapData> {
             completed.push(item);
         } else if TASK_BLOCKED.is_match(trimmed) {
             blocked.push(item);
+        } else if TASK_SKIPPED.is_match(trimmed) {
+            skipped.push(item);
         }
     }
 
@@ -77,13 +82,14 @@ pub fn parse_roadmap(content: &str) -> Result<RoadmapData> {
         .and_then(|c| c.get(1))
         .map(|m| m.as_str().to_string());
 
-    let total = pending.len() + in_progress.len() + completed.len() + blocked.len();
+    let total = pending.len() + in_progress.len() + completed.len() + blocked.len() + skipped.len();
 
     Ok(RoadmapData {
         pending,
         in_progress,
         completed,
         blocked,
+        skipped,
         current_phase,
         total,
     })
@@ -259,6 +265,7 @@ mod tests {
 - [>] TASK-002: In progress task
 - [x] TASK-003: Completed task
 - [!] TASK-004: Blocked task
+- [-] TASK-004B: Skipped task
 
 ### Phase 2
 - [ ] TASK-005: Another pending
@@ -269,7 +276,8 @@ mod tests {
         assert_eq!(data.in_progress.len(), 1);
         assert_eq!(data.completed.len(), 1);
         assert_eq!(data.blocked.len(), 1);
-        assert_eq!(data.total, 5);
+        assert_eq!(data.skipped.len(), 1);
+        assert_eq!(data.total, 6);
         assert_eq!(data.current_phase, Some("Phase 1".to_string()));
     }
 
@@ -294,7 +302,7 @@ mod tests {
         let task = parse_task_file(content, "TASK-001").unwrap();
         assert_eq!(task.id, "TASK-001");
         assert_eq!(task.name, "Implement Authentication");
-        assert_eq!(task.status, "In");
+        assert_eq!(task.status, "In Progress");
         assert_eq!(task.phase, Some("1".to_string()));
         assert_eq!(task.dependencies.len(), 1);
         assert_eq!(task.acceptance_criteria.len(), 3);

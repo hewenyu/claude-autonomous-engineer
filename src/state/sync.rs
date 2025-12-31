@@ -41,10 +41,11 @@ pub fn sync_from_roadmap(project_root: &Path, roadmap_path: &Path) -> Result<boo
     let mut memory: Memory = read_json(&memory_path).unwrap_or_default();
 
     // 更新进度
-    memory.progress.tasks_completed = roadmap_data.completed.len();
+    memory.progress.tasks_completed = roadmap_data.completed.len() + roadmap_data.skipped.len();
     memory.progress.tasks_total = roadmap_data.total;
     memory.progress.tasks_pending = roadmap_data.pending.len();
     memory.progress.tasks_in_progress = roadmap_data.in_progress.len();
+    memory.progress.tasks_skipped = roadmap_data.skipped.len();
     memory.progress.current_phase = roadmap_data.current_phase.clone();
     memory.progress.last_synced = Some(Utc::now().to_rfc3339());
 

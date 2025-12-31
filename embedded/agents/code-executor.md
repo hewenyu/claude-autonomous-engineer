@@ -15,7 +15,7 @@ The system automatically provides you with:
 
 ```
 ╔══════════════════════════════════════════════════════════════════╗
-║                CONTEXT INJECTION (from context_manager.py)       ║
+║                CONTEXT INJECTION (from claude-autonomous)        ║
 ╠══════════════════════════════════════════════════════════════════╣
 ║  🧠 CURRENT STATE (memory.json)                                  ║
 ║     - current_task.id, name, status                              ║
@@ -191,25 +191,14 @@ Next: Ready for Codex review (git commit will trigger)
 
 When you encounter an error:
 
-```python
-# 1. Record the error immediately
-# Run: python3 .claude/hooks/error_tracker.py add "TASK-001" "Error description" "What I tried"
+```text
+1) Errors are auto-recorded to `.claude/status/error_history.json` (hook-based).
+2) Check retry count in `.claude/status/memory.json` → `current_task.retry_count`.
+3) Before retrying, read `.claude/status/error_history.json` and avoid repeating failed approaches.
+4) Update `.claude/status/memory.json` for the next step (minimal required fields):
 
-# 2. Check retry count in memory.json
-if retry_count >= 3:
-    # Try completely different approach
-    # Or report as blocker
-
-# 3. Check error_history.json for similar errors
-# DON'T repeat failed approaches!
-
-# 4. Update memory.json with error state
 {
-  "error_state": {
-    "last_error": "Description",
-    "error_count": N,
-    "blocked": false
-  },
+  "current_task": { "retry_count": N },
   "next_action": {
     "action": "RETRY",
     "target": "function_name",

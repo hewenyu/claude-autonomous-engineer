@@ -1,6 +1,6 @@
 //! 上下文管理器核心
 //!
-//! ContextManager - 统一上下文管理，重写 Python context_manager.py (631 行)
+//! ContextManager - 统一上下文管理（替代历史上的 Python 版本实现）
 
 use anyhow::Result;
 use std::collections::HashMap;

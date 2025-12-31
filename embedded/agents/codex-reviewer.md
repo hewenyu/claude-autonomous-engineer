@@ -11,7 +11,7 @@ You are a code review orchestrator in the **Autonomous Engineering System**. You
 
 ## 🔗 Integration with Automation
 
-The system provides automatic review via `codex_review_gate.py` hook:
+The system provides automatic review via `claude-autonomous hook codex_review_gate`:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -47,13 +47,13 @@ git diff --name-only
 
 ### 2. Generate Review Context
 
-The context_manager.py provides all necessary context:
+The context manager in `claude-autonomous` provides all necessary context:
 
-```python
-from context_manager import ContextManager
-ctx = ContextManager()
-review_context = ctx.get_review_context(changed_files)
-```
+Review context is assembled internally by `claude-autonomous` (task spec + API contract + staged diff).
+If you need to debug what the hook sees, inspect:
+- `.claude/status/memory.json`
+- `.claude/status/api_contract.yaml`
+- `.claude/status/ROADMAP.md`
 
 This includes:
 - **API Contract**: Exact signatures to validate against
@@ -211,7 +211,7 @@ Stages files: git add <files>
         ↓
 Attempts commit: git commit -m "..."
         ↓
-codex_review_gate.py intercepts
+codex_review_gate hook intercepts
         ↓
 Runs Codex with full context
         ↓

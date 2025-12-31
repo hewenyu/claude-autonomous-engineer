@@ -53,10 +53,11 @@ Action Required:
 Summary:
 - Total tasks: {}
 - Completed: {}
+- Skipped: {}
 
 The autonomous loop has finished successfully.
 You may now stop.
-"#, roadmap.total, roadmap.completed)
+"#, roadmap.total, roadmap.completed, roadmap.skipped)
         }));
     }
 
@@ -71,8 +72,9 @@ Suggestion: {}
 
 Options:
 1. Try a COMPLETELY DIFFERENT approach
-2. Skip current task: Mark as [!] in ROADMAP
-3. Request human intervention
+2. Block current task: Mark as [!] in ROADMAP
+3. Skip current task: Mark as [-] in ROADMAP
+4. Request human intervention
 
 DO NOT simply retry the same approach.
 "#, stuck.reason, stuck.suggestion)
@@ -81,7 +83,7 @@ DO NOT simply retry the same approach.
 
     // 情况4: 正常继续
     let progress_pct = if roadmap.total > 0 {
-        (roadmap.completed as f64 / roadmap.total as f64) * 100.0
+        ((roadmap.completed + roadmap.skipped) as f64 / roadmap.total as f64) * 100.0
     } else {
         0.0
     };
@@ -92,15 +94,17 @@ DO NOT simply retry the same approach.
 
 Progress: {}/{} ({:.1}%)
 ├── Completed: {}
+├── Skipped: {}
 ├── In Progress: {}
-└── Pending: {}
+├── Pending: {}
+└── Blocked: {}
 
 Next Task: {}
 
 Continue the loop. DO NOT STOP.
 "#,
-            roadmap.completed, roadmap.total, progress_pct,
-            roadmap.completed, roadmap.in_progress, roadmap.pending,
+            roadmap.completed + roadmap.skipped, roadmap.total, progress_pct,
+            roadmap.completed, roadmap.skipped, roadmap.in_progress, roadmap.pending, roadmap.blocked,
             roadmap.next_task.chars().take(80).collect::<String>()
         )
     }))
@@ -117,6 +121,8 @@ struct RoadmapStatus {
     pending: usize,
     in_progress: usize,
     completed: usize,
+    blocked: usize,
+    skipped: usize,
     total: usize,
     next_task: String,
 }
@@ -141,6 +147,8 @@ fn check_roadmap(project_root: &Path) -> Result<RoadmapStatus> {
                 pending: 0,
                 in_progress: 0,
                 completed: 0,
+                blocked: 0,
+                skipped: 0,
                 total: 0,
                 next_task: String::new(),
             })
@@ -161,6 +169,8 @@ fn check_roadmap(project_root: &Path) -> Result<RoadmapStatus> {
         pending: data.pending.len(),
         in_progress: data.in_progress.len(),
         completed: data.completed.len(),
+        blocked: data.blocked.len(),
+        skipped: data.skipped.len(),
         total: data.total,
         next_task,
     })

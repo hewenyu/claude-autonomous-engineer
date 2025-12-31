@@ -88,6 +88,9 @@ pub struct Progress {
     #[serde(default)]
     pub tasks_in_progress: usize,
 
+    #[serde(default)]
+    pub tasks_skipped: usize,
+
     pub current_phase: Option<String>,
     pub current_phase_name: Option<String>,
     pub current_phase_status: Option<String>,
@@ -119,6 +122,7 @@ pub struct RoadmapData {
     pub in_progress: Vec<TaskItem>,
     pub completed: Vec<TaskItem>,
     pub blocked: Vec<TaskItem>,
+    pub skipped: Vec<TaskItem>,
     pub current_phase: Option<String>,
     pub total: usize,
 }
@@ -139,7 +143,7 @@ impl RoadmapData {
 
     /// 检查是否全部完成
     pub fn is_complete(&self) -> bool {
-        self.pending.is_empty() && self.in_progress.is_empty()
+        self.pending.is_empty() && self.in_progress.is_empty() && self.blocked.is_empty()
     }
 }
 
