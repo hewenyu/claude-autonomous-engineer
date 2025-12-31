@@ -21,10 +21,7 @@ pub fn run_progress_sync_hook(project_root: &Path, input: &Value) -> Result<Valu
     let file_path = match file_path {
         Some(p) => p,
         None => {
-            return Ok(json!({
-                "status": "ok",
-                "action": "none"
-            }))
+            return Ok(noop_posttooluse_output());
         }
     };
 
@@ -50,22 +47,20 @@ pub fn run_progress_sync_hook(project_root: &Path, input: &Value) -> Result<Valu
     // This reduces reliance on the model to manually maintain working_context.
     let _ = record_modified_file(project_root, &file_path);
 
-    // 输出结果
-    if synced {
-        Ok(json!({
-            "status": "ok",
-            "action": "synced",
-            "sync_type": sync_type,
-            "file": file_path.to_string_lossy(),
-            "message": format!("Progress synced from {} file", sync_type.unwrap_or("unknown"))
-        }))
-    } else {
-        Ok(json!({
-            "status": "ok",
-            "action": "none",
-            "file": file_path.to_string_lossy()
-        }))
-    }
+    // Hook 输出必须符合 Claude Code 的 schema（避免 JSON 校验失败）。
+    // 该 hook 仅做副作用（同步文件进度），不需要额外上下文注入。
+    let _ = (synced, sync_type);
+    Ok(noop_posttooluse_output())
+}
+
+fn noop_posttooluse_output() -> Value {
+    json!({
+        "hookSpecificOutput": {
+            "for PostToolUse": {
+                "hookEventName": "PostToolUse"
+            }
+        }
+    })
 }
 
 /// 从输入中提取文件路径
@@ -131,8 +126,10 @@ mod tests {
         let input = json!({});
 
         let result = run_progress_sync_hook(temp.path(), &input).unwrap();
-        assert_eq!(result["status"], "ok");
-        assert_eq!(result["action"], "none");
+        assert_eq!(
+            result["hookSpecificOutput"]["for PostToolUse"]["hookEventName"],
+            "PostToolUse"
+        );
     }
 
     #[test]

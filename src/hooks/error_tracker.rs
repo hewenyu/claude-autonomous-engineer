@@ -18,39 +18,22 @@ const LAST_TEST_FAILURE_SIG_KEY: &str = "last_test_failure_signature";
 /// Run error_tracker hook
 pub fn run_error_tracker_hook(project_root: &Path, input: &Value) -> Result<Value> {
     match extract_outcome(input) {
-        ExecutionOutcome::Unknown => Ok(json!({
-            "status": "ok",
-            "action": "none"
-        })),
+        ExecutionOutcome::Unknown => Ok(noop_posttooluse_output()),
         ExecutionOutcome::Success { command } => {
             // Best-effort: if a command succeeds, mark matching unresolved errors as resolved.
             let memory_file = project_root.join(".claude/status/memory.json");
             let mut memory: Memory = read_json(&memory_file).unwrap_or_default();
             let Some(task_id) = memory.current_task.id.clone() else {
-                return Ok(json!({
-                    "status": "ok",
-                    "action": "none"
-                }));
+                return Ok(noop_posttooluse_output());
             };
 
-            let resolved = resolve_matching_errors(project_root, &task_id, &command)?;
+            let _resolved = resolve_matching_errors(project_root, &task_id, &command)?;
 
             // Best-effort bookkeeping for long-running sessions
             update_memory_on_command_success(&mut memory, &command);
             let _ = write_json(&memory_file, &memory);
 
-            if resolved > 0 {
-                Ok(json!({
-                    "status": "ok",
-                    "action": "resolved",
-                    "resolved": resolved,
-                }))
-            } else {
-                Ok(json!({
-                    "status": "ok",
-                    "action": "none"
-                }))
-            }
+            Ok(noop_posttooluse_output())
         }
         ExecutionOutcome::Failure(failure) => {
             // Load memory (optional) to bind errors to the current task.
@@ -88,14 +71,19 @@ pub fn run_error_tracker_hook(project_root: &Path, input: &Value) -> Result<Valu
             update_memory_on_command_failure(&mut memory, &failure);
             let _ = write_json(&memory_file, &memory);
 
-            Ok(json!({
-                "status": "ok",
-                "action": "recorded",
-                "kind": failure.kind,
-                "incremented_retry": failure.increment_retry,
-            }))
+            Ok(noop_posttooluse_output())
         }
     }
+}
+
+fn noop_posttooluse_output() -> Value {
+    json!({
+        "hookSpecificOutput": {
+            "for PostToolUse": {
+                "hookEventName": "PostToolUse"
+            }
+        }
+    })
 }
 
 #[derive(Debug)]
@@ -477,7 +465,10 @@ mod tests {
         });
 
         let result = run_error_tracker_hook(temp.path(), &input).unwrap();
-        assert_eq!(result["action"], "recorded");
+        assert_eq!(
+            result["hookSpecificOutput"]["for PostToolUse"]["hookEventName"],
+            "PostToolUse"
+        );
 
         let errors: Vec<Value> =
             read_json(&temp.path().join(".claude/status/error_history.json")).unwrap();
@@ -507,7 +498,10 @@ mod tests {
             "tool_output": { "exit_code": 0, "stdout": "Finished" }
         });
         let result = run_error_tracker_hook(temp.path(), &success_input).unwrap();
-        assert_eq!(result["action"], "resolved");
+        assert_eq!(
+            result["hookSpecificOutput"]["for PostToolUse"]["hookEventName"],
+            "PostToolUse"
+        );
 
         let errors: Vec<Value> =
             read_json(&temp.path().join(".claude/status/error_history.json")).unwrap();

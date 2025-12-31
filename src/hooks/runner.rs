@@ -39,8 +39,7 @@ pub fn run_hook(hook_name: &str, project_root: &Path, input: Option<&Value>) -> 
         _ => {
             // 未知 hook，返回默认响应
             Ok(json!({
-                "status": "ok",
-                "message": format!("Unknown hook: {}", hook_name)
+                "systemMessage": format!("Unknown hook: {}", hook_name)
             }))
         }
     }
@@ -92,7 +91,10 @@ mod tests {
         let input = json!({});
 
         let result = run_hook("progress_sync", temp.path(), Some(&input)).unwrap();
-        assert_eq!(result["status"], "ok");
+        assert_eq!(
+            result["hookSpecificOutput"]["for PostToolUse"]["hookEventName"],
+            "PostToolUse"
+        );
     }
 
     #[test]
@@ -125,6 +127,6 @@ mod tests {
     fn test_run_hook_unknown() {
         let temp = TempDir::new().unwrap();
         let result = run_hook("unknown_hook", temp.path(), None).unwrap();
-        assert_eq!(result["status"], "ok");
+        assert!(result["systemMessage"].as_str().unwrap_or("").contains("Unknown hook"));
     }
 }
