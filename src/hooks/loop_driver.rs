@@ -291,10 +291,7 @@ fn auto_transition_state(
     }
 
     // 场景 3: 有任务进行中 + 当前状态是 Idle → Coding
-    if roadmap.in_progress > 0
-        && task_id.is_some()
-        && current_state.state_id == StateId::Idle
-    {
+    if roadmap.in_progress > 0 && task_id.is_some() && current_state.state_id == StateId::Idle {
         println!("💻 Task started - transitioning to CODING state");
         let _ = state_machine.transition_to(StateId::Coding, task_id.as_deref(), None);
         return Ok(());
@@ -307,9 +304,7 @@ fn auto_transition_state(
     let recent_test_activity = errors.iter().rev().take(5).any(|e| {
         e.get("error")
             .and_then(|err| err.as_str())
-            .map(|s| {
-                s.contains("test") || s.contains("pytest") || s.contains("cargo test")
-            })
+            .map(|s| s.contains("test") || s.contains("pytest") || s.contains("cargo test"))
             .unwrap_or(false)
     });
 

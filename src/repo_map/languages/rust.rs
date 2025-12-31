@@ -275,7 +275,6 @@ impl RustExtractor {
         None
     }
 
-    /// 检查节点之前是否有特定修饰符
     // NOTE: 旧实现曾尝试从“父节点兄弟”里寻找修饰符；在 tree-sitter-rust 语法中，
     // 大多数修饰符是 function_item/impl_item 的子节点，因此已由 `has_modifier_token` 覆盖。
 }

@@ -10,21 +10,24 @@ pub fn generate_markdown(all_symbols: &[FileSymbols]) -> Result<String> {
 
     // 头部
     output.push_str("# Repository Structure Map\n\n");
-    output.push_str(&format!("Generated: {}\n\n", Utc::now().format("%Y-%m-%d %H:%M:%S")));
+    output.push_str(&format!(
+        "Generated: {}\n\n",
+        Utc::now().format("%Y-%m-%d %H:%M:%S")
+    ));
 
     // 统计信息
     let total_files = all_symbols.len();
     let total_symbols: usize = all_symbols.iter().map(|f| f.symbols.len()).sum();
-    output.push_str(&format!("Files: {} | Symbols: {}\n\n", total_files, total_symbols));
+    output.push_str(&format!(
+        "Files: {} | Symbols: {}\n\n",
+        total_files, total_symbols
+    ));
 
     output.push_str("---\n\n");
 
     // 按文件组织
     for file_symbols in all_symbols {
-        let relative_path = file_symbols
-            .file_path
-            .to_string_lossy()
-            .replace("\\", "/");
+        let relative_path = file_symbols.file_path.to_string_lossy().replace("\\", "/");
 
         output.push_str(&format!("## {}\n\n", relative_path));
 

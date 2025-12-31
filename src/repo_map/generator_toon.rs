@@ -15,7 +15,10 @@ pub fn generate_toon(all_symbols: &[FileSymbols]) -> Result<String> {
 
     // 头部元数据（使用 YAML 风格）
     output.push_str("# Repository Structure Map (TOON Format)\n");
-    output.push_str(&format!("generated: {}\n", Utc::now().format("%Y-%m-%d %H:%M:%S")));
+    output.push_str(&format!(
+        "generated: {}\n",
+        Utc::now().format("%Y-%m-%d %H:%M:%S")
+    ));
 
     // 统计信息
     let total_files = all_symbols.len();
@@ -34,7 +37,10 @@ pub fn generate_toon(all_symbols: &[FileSymbols]) -> Result<String> {
     // 为每个文件生成 TOON 条目
     for (idx, file_symbols) in all_symbols.iter().enumerate() {
         output.push_str(&format!("\n  # File {}\n", idx + 1));
-        output.push_str(&format!("  path: {}\n", escape_toon_string(&file_symbols.file_path.to_string_lossy())));
+        output.push_str(&format!(
+            "  path: {}\n",
+            escape_toon_string(&file_symbols.file_path.to_string_lossy())
+        ));
         output.push_str(&format!("  language: {}\n", file_symbols.language));
         output.push_str(&format!("  hash: {}\n", file_symbols.hash));
 
@@ -54,8 +60,10 @@ fn generate_symbols_table(output: &mut String, symbols: &[Symbol], indent: &str)
     let count = symbols.len();
 
     // TOON 数组声明：symbols[N]{kind,name,signature,line_start,line_end}:
-    output.push_str(&format!("{}symbols[{}]{{kind,name,signature,line_start,line_end}}:\n",
-        indent, count));
+    output.push_str(&format!(
+        "{}symbols[{}]{{kind,name,signature,line_start,line_end}}:\n",
+        indent, count
+    ));
 
     // 数据行
     for symbol in symbols {
@@ -63,13 +71,9 @@ fn generate_symbols_table(output: &mut String, symbols: &[Symbol], indent: &str)
         let name = escape_toon_string(&symbol.name);
         let signature = escape_toon_string(&symbol.signature);
 
-        output.push_str(&format!("{}  {},{},{},{},{}\n",
-            indent,
-            kind_str,
-            name,
-            signature,
-            symbol.line_start,
-            symbol.line_end
+        output.push_str(&format!(
+            "{}  {},{},{},{},{}\n",
+            indent, kind_str, name, signature, symbol.line_start, symbol.line_end
         ));
     }
 
@@ -113,30 +117,46 @@ pub fn generate_toon_grouped(all_symbols: &[FileSymbols]) -> Result<String> {
 
     // 头部元数据
     output.push_str("# Repository Structure Map (TOON Format - Grouped)\n");
-    output.push_str(&format!("generated: {}\n\n", Utc::now().format("%Y-%m-%d %H:%M:%S")));
+    output.push_str(&format!(
+        "generated: {}\n\n",
+        Utc::now().format("%Y-%m-%d %H:%M:%S")
+    ));
 
     output.push_str(&format!("files[{}]:\n", all_symbols.len()));
 
     // 为每个文件生成分组的符号
     for (idx, file_symbols) in all_symbols.iter().enumerate() {
         output.push_str(&format!("\n  # File {}\n", idx + 1));
-        output.push_str(&format!("  path: {}\n", escape_toon_string(&file_symbols.file_path.to_string_lossy())));
+        output.push_str(&format!(
+            "  path: {}\n",
+            escape_toon_string(&file_symbols.file_path.to_string_lossy())
+        ));
         output.push_str(&format!("  language: {}\n", file_symbols.language));
 
         // 按类型分组
-        let functions: Vec<_> = file_symbols.symbols.iter()
+        let functions: Vec<_> = file_symbols
+            .symbols
+            .iter()
             .filter(|s| s.kind == SymbolKind::Function)
             .collect();
-        let structs: Vec<_> = file_symbols.symbols.iter()
+        let structs: Vec<_> = file_symbols
+            .symbols
+            .iter()
             .filter(|s| s.kind == SymbolKind::Struct)
             .collect();
-        let enums: Vec<_> = file_symbols.symbols.iter()
+        let enums: Vec<_> = file_symbols
+            .symbols
+            .iter()
             .filter(|s| s.kind == SymbolKind::Enum)
             .collect();
-        let traits: Vec<_> = file_symbols.symbols.iter()
+        let traits: Vec<_> = file_symbols
+            .symbols
+            .iter()
             .filter(|s| s.kind == SymbolKind::Trait)
             .collect();
-        let impls: Vec<_> = file_symbols.symbols.iter()
+        let impls: Vec<_> = file_symbols
+            .symbols
+            .iter()
             .filter(|s| s.kind == SymbolKind::Impl)
             .collect();
 

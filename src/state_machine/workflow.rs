@@ -65,21 +65,9 @@ impl WorkflowEngine {
         match from {
             StateId::Idle => vec![StateId::Planning],
             StateId::Planning => vec![StateId::Coding, StateId::Blocked],
-            StateId::Coding => vec![
-                StateId::Testing,
-                StateId::Reviewing,
-                StateId::Blocked,
-            ],
-            StateId::Testing => vec![
-                StateId::Coding,
-                StateId::Reviewing,
-                StateId::Blocked,
-            ],
-            StateId::Reviewing => vec![
-                StateId::Completed,
-                StateId::Coding,
-                StateId::Blocked,
-            ],
+            StateId::Coding => vec![StateId::Testing, StateId::Reviewing, StateId::Blocked],
+            StateId::Testing => vec![StateId::Coding, StateId::Reviewing, StateId::Blocked],
+            StateId::Reviewing => vec![StateId::Completed, StateId::Coding, StateId::Blocked],
             StateId::Blocked => vec![
                 StateId::Planning,
                 StateId::Coding,
@@ -186,9 +174,7 @@ mod tests {
         assert!(WorkflowEngine::validate_transition(StateId::Idle, StateId::Planning).is_ok());
         assert!(WorkflowEngine::validate_transition(StateId::Planning, StateId::Coding).is_ok());
         assert!(WorkflowEngine::validate_transition(StateId::Coding, StateId::Testing).is_ok());
-        assert!(
-            WorkflowEngine::validate_transition(StateId::Testing, StateId::Reviewing).is_ok()
-        );
+        assert!(WorkflowEngine::validate_transition(StateId::Testing, StateId::Reviewing).is_ok());
         assert!(
             WorkflowEngine::validate_transition(StateId::Reviewing, StateId::Completed).is_ok()
         );
@@ -205,9 +191,7 @@ mod tests {
         assert!(WorkflowEngine::validate_transition(StateId::Coding, StateId::Completed).is_err());
 
         // Testing 不能直接到 Completed
-        assert!(
-            WorkflowEngine::validate_transition(StateId::Testing, StateId::Completed).is_err()
-        );
+        assert!(WorkflowEngine::validate_transition(StateId::Testing, StateId::Completed).is_err());
     }
 
     #[test]
@@ -216,9 +200,7 @@ mod tests {
         assert!(WorkflowEngine::validate_transition(StateId::Testing, StateId::Coding).is_ok());
 
         // 审查失败可以回到编码
-        assert!(
-            WorkflowEngine::validate_transition(StateId::Reviewing, StateId::Coding).is_ok()
-        );
+        assert!(WorkflowEngine::validate_transition(StateId::Reviewing, StateId::Coding).is_ok());
     }
 
     #[test]

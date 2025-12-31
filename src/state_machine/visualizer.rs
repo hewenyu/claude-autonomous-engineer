@@ -61,10 +61,7 @@ impl StateVisualizer {
     }
 
     /// 生成状态转换图（ASCII 艺术）
-    pub fn render_transition_graph(
-        snapshots: &[StateSnapshot],
-        task_id: Option<&str>,
-    ) -> String {
+    pub fn render_transition_graph(snapshots: &[StateSnapshot], task_id: Option<&str>) -> String {
         let mut output = String::new();
 
         output.push_str("📈 State Transition Graph");
@@ -77,12 +74,7 @@ impl StateVisualizer {
         let filtered: Vec<_> = if let Some(tid) = task_id {
             snapshots
                 .iter()
-                .filter(|s| {
-                    s.parse_tag_info()
-                        .and_then(|(_, t)| t)
-                        .as_deref()
-                        == Some(tid)
-                })
+                .filter(|s| s.parse_tag_info().and_then(|(_, t)| t).as_deref() == Some(tid))
                 .collect()
         } else {
             snapshots.iter().collect()
@@ -112,16 +104,14 @@ impl StateVisualizer {
                 time_str
             ));
 
-            output.push_str(&format!(
-                "      │{:>38}tag: ...{}\n",
-                "", tag_suffix
-            ));
+            output.push_str(&format!("      │{:>38}tag: ...{}\n", "", tag_suffix));
 
             // 检测是否有提交或特殊事件
             if idx < filtered.len() - 1 {
                 let next_snapshot = filtered[idx + 1];
-                let (next_state, _) =
-                    next_snapshot.parse_tag_info().unwrap_or((StateId::Idle, None));
+                let (next_state, _) = next_snapshot
+                    .parse_tag_info()
+                    .unwrap_or((StateId::Idle, None));
 
                 if Self::is_rollback_transition(state_id, next_state) {
                     output.push_str("      │\n");
@@ -207,7 +197,11 @@ impl StateVisualizer {
                 .unwrap_or((StateId::Idle, None));
 
             if Self::is_rollback_transition(current_state, prev_state) {
-                patterns.push(format!("{} → {}", prev_state.as_str(), current_state.as_str()));
+                patterns.push(format!(
+                    "{} → {}",
+                    prev_state.as_str(),
+                    current_state.as_str()
+                ));
             }
         }
 

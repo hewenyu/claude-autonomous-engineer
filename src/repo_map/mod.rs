@@ -172,7 +172,8 @@ impl RepoMapper {
         };
 
         // 更新缓存
-        self.cache.insert(&relative_path, hash, file_symbols.clone());
+        self.cache
+            .insert(&relative_path, hash, file_symbols.clone());
 
         Ok(Some(file_symbols))
     }

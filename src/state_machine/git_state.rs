@@ -142,7 +142,11 @@ impl GitStateMachine {
 
         let sig = self.get_signature()?;
 
-        let message = format!("state: {} | task: {}", final_state_id.as_str(), task_id.unwrap_or("none"));
+        let message = format!(
+            "state: {} | task: {}",
+            final_state_id.as_str(),
+            task_id.unwrap_or("none")
+        );
 
         // 获取 HEAD commit 作为 parent
         let parent_commit = match self.repo.head() {
@@ -151,17 +155,12 @@ impl GitStateMachine {
         };
 
         let commit_oid = if let Some(parent) = parent_commit {
-            self.repo.commit(
-                Some("HEAD"),
-                &sig,
-                &sig,
-                &message,
-                &tree,
-                &[&parent],
-            )?
+            self.repo
+                .commit(Some("HEAD"), &sig, &sig, &message, &tree, &[&parent])?
         } else {
             // 首次提交（无 parent）
-            self.repo.commit(Some("HEAD"), &sig, &sig, &message, &tree, &[])?
+            self.repo
+                .commit(Some("HEAD"), &sig, &sig, &message, &tree, &[])?
         };
 
         // 5. Git tag

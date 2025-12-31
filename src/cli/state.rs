@@ -24,14 +24,16 @@ pub fn list_states() -> Result<()> {
     let current_tag = snapshots.iter().find(|s| {
         s.state
             .as_ref()
-            .and_then(|state| current_state.as_ref().map(|cs| state.state_id == cs.state_id))
+            .and_then(|state| {
+                current_state
+                    .as_ref()
+                    .map(|cs| state.state_id == cs.state_id)
+            })
             .unwrap_or(false)
     });
 
-    let output = StateVisualizer::render_state_list(
-        &snapshots,
-        current_tag.map(|s| s.tag.as_str()),
-    );
+    let output =
+        StateVisualizer::render_state_list(&snapshots, current_tag.map(|s| s.tag.as_str()));
 
     println!("{}", output);
 
@@ -47,15 +49,13 @@ pub fn show_current_state() -> Result<()> {
     let state = state_machine.current_state()?;
 
     println!("📊 Current State:\n");
-    println!("  State:     {} {}", state.state_id.icon(), state.state_id.as_str());
     println!(
-        "  Task ID:   {}",
-        state.task_id.as_deref().unwrap_or("-")
+        "  State:     {} {}",
+        state.state_id.icon(),
+        state.state_id.as_str()
     );
-    println!(
-        "  Phase:     {}",
-        state.phase.as_deref().unwrap_or("-")
-    );
+    println!("  Task ID:   {}", state.task_id.as_deref().unwrap_or("-"));
+    println!("  Phase:     {}", state.phase.as_deref().unwrap_or("-"));
     println!("  Timestamp: {}", state.timestamp);
 
     println!("\n📝 Description:");
@@ -139,8 +139,8 @@ pub fn transition_to(state_str: &str, task_id: Option<&str>) -> Result<()> {
     let state_machine = GitStateMachine::new(&project_root)?;
 
     // 解析目标状态
-    let target_state = StateId::from_str(state_str)
-        .context(format!("Invalid state: {}", state_str))?;
+    let target_state =
+        StateId::from_str(state_str).context(format!("Invalid state: {}", state_str))?;
 
     // 获取当前状态
     let current_state = state_machine.current_state()?;

@@ -440,18 +440,13 @@ fn generate_repo_map(output: Option<String>, force: bool, format_str: String) ->
 
     println!();
     println!("{}", "✅ Repository Map generated!".green().bold());
-    println!(
-        "   📁 Output: {}",
-        output_path.display().to_string().cyan()
-    );
+    println!("   📁 Output: {}", output_path.display().to_string().cyan());
     println!("   📊 Format: {}{}", format_name.cyan(), token_saved_msg);
     println!("   ⏱️  Time: {:.2}s", elapsed.as_secs_f64());
     println!();
 
     if matches!(format, OutputFormat::Toon | OutputFormat::ToonGrouped) {
-        println!(
-            "💡 Tip: TOON 格式可减少 30-60% token 消耗，更适合 LLM 处理"
-        );
+        println!("💡 Tip: TOON 格式可减少 30-60% token 消耗，更适合 LLM 处理");
     } else {
         println!("💡 Tip: Repository Map 已保存，可用于减少 token 消耗");
     }
@@ -497,9 +492,7 @@ fn main() -> Result<()> {
                 StateCommands::List => cli::list_states(),
                 StateCommands::Current => cli::show_current_state(),
                 StateCommands::Rollback { tag } => cli::rollback_to_tag(&tag),
-                StateCommands::Graph { task_id } => {
-                    cli::show_state_graph(task_id.as_deref())
-                }
+                StateCommands::Graph { task_id } => cli::show_state_graph(task_id.as_deref()),
                 StateCommands::Transition { state, task_id } => {
                     cli::transition_to(&state, task_id.as_deref())
                 }

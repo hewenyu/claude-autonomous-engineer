@@ -9,10 +9,10 @@ pub mod progress_sync;
 pub mod runner;
 
 // Codex Review 相关模块
-pub mod state_tracker;
-pub mod review_context;
 pub mod codex_executor;
+pub mod review_context;
 pub mod review_parser;
+pub mod state_tracker;
 
 // 重导出
 pub use codex_review_gate::*;

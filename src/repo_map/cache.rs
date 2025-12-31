@@ -39,7 +39,10 @@ impl FileHashCache {
         if cache_file.exists() {
             let content = std::fs::read_to_string(&cache_file)?;
             let cache: HashMap<PathBuf, CacheEntry> = serde_json::from_str(&content)?;
-            Ok(Self { cache, dirty: false })
+            Ok(Self {
+                cache,
+                dirty: false,
+            })
         } else {
             Ok(Self {
                 cache: HashMap::new(),

@@ -105,12 +105,20 @@ impl TransitionHookManager {
             match decision {
                 HookDecision::Block(reason) => {
                     // 遇到 Block，立即停止并返回
-                    println!("🚫 PreTransition hook '{}' blocked transition: {}", hook.name(), reason);
+                    println!(
+                        "🚫 PreTransition hook '{}' blocked transition: {}",
+                        hook.name(),
+                        reason
+                    );
                     return Ok(HookDecision::Block(reason));
                 }
                 HookDecision::Modify(new_state) => {
                     // 修改目标状态
-                    println!("🔄 PreTransition hook '{}' modified target state to {}", hook.name(), new_state.as_str());
+                    println!(
+                        "🔄 PreTransition hook '{}' modified target state to {}",
+                        hook.name(),
+                        new_state.as_str()
+                    );
                     final_decision = HookDecision::Modify(new_state);
                 }
                 HookDecision::Allow => {
@@ -130,11 +138,7 @@ impl TransitionHookManager {
     ) -> Result<()> {
         for hook in &self.post_hooks {
             if let Err(e) = hook.execute(context, new_state) {
-                eprintln!(
-                    "⚠️  PostTransition hook '{}' failed: {}",
-                    hook.name(),
-                    e
-                );
+                eprintln!("⚠️  PostTransition hook '{}' failed: {}", hook.name(), e);
                 // Post hooks 失败不影响状态转换，只记录错误
             }
         }
@@ -169,10 +173,7 @@ impl PreTransitionHook for WorkflowValidationHook {
         // 验证转换是否合法
         match WorkflowEngine::validate_transition(context.from_state, context.to_state) {
             Ok(_) => Ok(HookDecision::Allow),
-            Err(e) => Ok(HookDecision::Block(format!(
-                "Invalid transition: {}",
-                e
-            ))),
+            Err(e) => Ok(HookDecision::Block(format!("Invalid transition: {}", e))),
         }
     }
 }
@@ -188,7 +189,9 @@ impl PostTransitionHook for LoggingHook {
     }
 
     fn execute(&self, context: &TransitionContext, new_state: &MachineState) -> Result<()> {
-        let log_file = context.project_root.join(".claude/status/state_transitions.log");
+        let log_file = context
+            .project_root
+            .join(".claude/status/state_transitions.log");
 
         let log_entry = format!(
             "[{}] {} → {} | Task: {} | Timestamp: {}\n",
