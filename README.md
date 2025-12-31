@@ -1,8 +1,8 @@
 # Claude Autonomous Engineer
 
-**让 Claude Code 真正实现自主工程 - 纯 Rust 实现，零 Python 依赖**
+**让 Claude Code 真正实现自主工程 - 纯 Rust 实现，单一二进制**
 
-这是一个完整的 Claude Code 自主工程系统，将复杂的 Python hooks 和 agents 重写为单一的 Rust 二进制文件。通过智能的上下文注入、自动进度同步和代码审查，让 Claude 能够真正自主地完成复杂的工程任务。
+这是一个完整的 Claude Code 自主工程系统，将所有 hooks 和 agents 打包进单一的 Rust 二进制文件（仅 2MB）。通过智能的上下文注入、自动进度同步和代码审查，让 Claude 能够真正自主地完成复杂的工程任务。
 
 ## 🎯 这个工具解决什么问题？
 
@@ -338,16 +338,16 @@ Claude: "TASK-003: 添加集成测试..."
 | **Project Finder** | Rust | - | Git-like 根目录查找（支持 submodule） |
 | **Templates** | Embedded | - | 5 个 agents + CLAUDE.md 模板 |
 
-### 为什么用 Rust 重写？
+### 为什么选择 Rust？
 
-| 对比项 | Python 版本 | Rust 版本 |
-|--------|-------------|-----------|
-| **启动时间** | 200ms+ | < 50ms |
-| **二进制大小** | 需要 Python 运行时 (~100MB) | 2MB 单文件 |
-| **依赖管理** | pip install + virtualenv | 零依赖 |
-| **内存占用** | ~50MB | < 20MB |
-| **部署** | 需要 Python 3.8+ | 单一二进制，直接运行 |
-| **性能** | Hook 执行 ~100ms | Hook 执行 < 30ms |
+| 特性 | 说明 |
+|------|------|
+| **极速启动** | < 50ms - 几乎零感知延迟 |
+| **超小体积** | 2MB 单文件 - 所有功能全包含 |
+| **零依赖** | 无需任何运行时或库 |
+| **低内存** | < 20MB - 轻量高效 |
+| **一键部署** | 单一二进制，复制即用 |
+| **高性能** | Hook 执行 < 30ms - 极致优化 |
 
 ## 🔍 智能根目录检测
 
