@@ -10,6 +10,7 @@ use crate::hooks::codex_executor::execute_codex_review_simple;
 use crate::hooks::review_context::ReviewContext;
 use crate::hooks::review_parser::Verdict;
 use crate::hooks::state_tracker::TaskStateTracker;
+use crate::hooks::state_tracker::TransitionType;
 use crate::utils::{get_staged_files, read_json};
 use crate::Memory;
 
@@ -82,10 +83,25 @@ pub fn run_codex_review_gate_hook(project_root: &Path, input: &Value) -> Result<
     // 检测状态转换
     let is_transition = state_tracker.detect_transition(current_task);
 
-    let review_result = if is_transition {
-        // 深度审查模式
-        let transition_type = state_tracker.classify_transition(current_task);
-        eprintln!("   ⚠️  State Transition Detected: {:?}", transition_type);
+    // 仅对“关键状态变化”触发深度审查，避免频繁误触发导致长周期自动化不稳定。
+    let transition_type = if is_transition {
+        Some(state_tracker.classify_transition(current_task))
+    } else {
+        None
+    };
+
+    let requires_deep_review = matches!(
+        transition_type,
+        Some(TransitionType::CompleteTask | TransitionType::BlockTask)
+    );
+
+    let review_result = if requires_deep_review {
+        // 深度审查模式（只在关键转换时启用）
+        let transition_type = transition_type.as_ref().expect("checked above");
+        eprintln!(
+            "   ⚠️  Critical State Transition Detected: {:?}",
+            transition_type
+        );
 
         let previous_snapshot = state_tracker
             .get_previous_snapshot(current_task.id.as_ref().unwrap())
@@ -113,8 +129,8 @@ pub fn run_codex_review_gate_hook(project_root: &Path, input: &Value) -> Result<
         Ok(result) => {
             match result.verdict {
                 Verdict::Pass => {
-                    if is_transition && !result.state_transition_valid {
-                        // 深度审查时，即使 PASS 也要检查状态转换有效性
+                    if requires_deep_review && !result.state_transition_valid {
+                        // 深度审查时，即使 PASS 也要检查状态转换有效性（只有显式 NO 才阻塞）
                         eprintln!("   ❌ State transition is invalid");
                         return Ok(deny_pretooluse(result.format_error_message()));
                     }

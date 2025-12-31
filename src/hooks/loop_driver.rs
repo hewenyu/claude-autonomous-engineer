@@ -3,16 +3,18 @@
 //! 智能循环驱动器 - 控制自主循环的继续/停止（Stop）
 
 use anyhow::Result;
+use chrono::{DateTime, Duration, Utc};
 use serde_json::{json, Value};
 use std::path::Path;
 
 use crate::state::{parse_roadmap, Memory};
 use crate::state_machine::{GitStateMachine, StateId};
-use crate::utils::{read_json, try_read_file};
+use crate::utils::{read_json, try_read_file, write_json};
 
 /// 最大重试次数
 const DEFAULT_MAX_RETRIES: u32 = 5;
 const MAX_CONSECUTIVE_ERRORS: usize = 10;
+const TEST_ACTIVITY_WINDOW_MINUTES: i64 = 5;
 
 /// 运行 loop_driver hook
 ///
@@ -24,6 +26,9 @@ pub fn run_loop_driver_hook(project_root: &Path) -> Result<Value> {
 
     // 自动状态转换（在检查之前尝试）
     let _ = auto_transition_state(project_root, &roadmap, &stuck);
+
+    // Best-effort: keep session counters and blocked state updated (do not fail the hook).
+    let _ = update_memory_for_loop(project_root, &roadmap, &stuck);
 
     // 情况1: ROADMAP 不存在
     if !roadmap.exists {
@@ -374,16 +379,19 @@ fn auto_transition_state(
         return Ok(());
     }
 
-    // 场景 5: 检测测试执行 (通过 error_history 判断)
+    // 场景 5: 检测测试执行（优先用 error_history.command，其次用 memory.session.last_test_at）
     let error_file = project_root.join(".claude/status/error_history.json");
     let errors: Vec<Value> = read_json(&error_file).unwrap_or_default();
 
-    let recent_test_activity = errors.iter().rev().take(5).any(|e| {
-        e.get("error")
-            .and_then(|err| err.as_str())
-            .map(|s| s.contains("test") || s.contains("pytest") || s.contains("cargo test"))
-            .unwrap_or(false)
-    });
+    let recent_test_activity = errors
+        .iter()
+        .rev()
+        .take(10)
+        .filter_map(|e| e.get("command").and_then(|c| c.as_str()))
+        .any(|cmd| is_test_command(cmd));
+
+    let recent_test_activity =
+        recent_test_activity || has_recent_test_activity_from_memory(&memory);
 
     if recent_test_activity && current_state.state_id == StateId::Coding {
         eprintln!("🧪 Test execution detected - transitioning to TESTING state");
@@ -395,6 +403,61 @@ fn auto_transition_state(
     // （这里不做状态转换，让 codex_review_gate 处理回滚）
 
     Ok(())
+}
+
+fn update_memory_for_loop(
+    project_root: &Path,
+    roadmap: &RoadmapStatus,
+    stuck: &StuckStatus,
+) -> Result<()> {
+    let memory_file = project_root.join(".claude/status/memory.json");
+    let mut memory: Memory = read_json(&memory_file).unwrap_or_default();
+
+    memory.session.loop_count = memory.session.loop_count.saturating_add(1);
+    memory.last_updated = Some(Utc::now().to_rfc3339());
+
+    if stuck.stuck {
+        memory.error_state.blocked = true;
+        memory.error_state.block_reason = Some(stuck.reason.clone());
+    } else if roadmap.blocked > 0 && roadmap.pending == 0 && roadmap.in_progress == 0 {
+        memory.error_state.blocked = true;
+        memory.error_state.block_reason = Some("Blocked tasks remain in ROADMAP".to_string());
+    } else {
+        memory.error_state.blocked = false;
+        memory.error_state.block_reason = None;
+    }
+
+    write_json(&memory_file, &memory)?;
+    Ok(())
+}
+
+fn is_test_command(command: &str) -> bool {
+    let cmd = command.to_lowercase();
+    cmd.contains("pytest")
+        || cmd.contains("cargo test")
+        || cmd.contains("go test")
+        || cmd.contains("npm test")
+        || cmd.contains("pnpm test")
+        || cmd.contains("yarn test")
+}
+
+fn has_recent_test_activity_from_memory(memory: &Memory) -> bool {
+    let Some(last_test_at) = memory
+        .session
+        .extra
+        .get("last_test_at")
+        .and_then(|v| v.as_str())
+    else {
+        return false;
+    };
+
+    let Ok(dt) = DateTime::parse_from_rfc3339(last_test_at) else {
+        return false;
+    };
+
+    let dt = dt.with_timezone(&Utc);
+    let age = Utc::now().signed_duration_since(dt);
+    age <= Duration::minutes(TEST_ACTIVITY_WINDOW_MINUTES)
 }
 
 #[cfg(test)]
@@ -460,5 +523,12 @@ mod tests {
             .as_str()
             .unwrap()
             .contains("AUTONOMOUS MODE ACTIVE"));
+    }
+
+    #[test]
+    fn test_is_test_command() {
+        assert!(is_test_command("cargo test -q"));
+        assert!(is_test_command("pytest -q"));
+        assert!(!is_test_command("cargo build"));
     }
 }

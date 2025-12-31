@@ -22,7 +22,37 @@ pub fn write_file(path: &Path, content: &str) -> Result<()> {
             .with_context(|| format!("Failed to create directory: {}", parent.display()))?;
     }
 
-    fs::write(path, content).with_context(|| format!("Failed to write file: {}", path.display()))
+    write_file_atomic(path, content)
+        .with_context(|| format!("Failed to write file: {}", path.display()))
+}
+
+/// 原子写入文件（同目录 tmp + rename）
+///
+/// 目的：
+/// - 避免被中断时写出半截文件（JSON 损坏是长周期自动化的常见致命点）
+/// - 同目录 rename 在大多数平台上是原子的
+fn write_file_atomic(path: &Path, content: &str) -> Result<()> {
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("file");
+    let tmp_name = format!(
+        ".{}.tmp.{}.{}",
+        file_name,
+        std::process::id(),
+        chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)
+    );
+    let tmp_path = parent.join(tmp_name);
+
+    fs::write(&tmp_path, content)?;
+
+    // On Windows, rename fails if destination exists; remove then rename as fallback.
+    match fs::rename(&tmp_path, path) {
+        Ok(()) => Ok(()),
+        Err(_) => {
+            let _ = fs::remove_file(path);
+            fs::rename(&tmp_path, path)?;
+            Ok(())
+        }
+    }
 }
 
 /// 追加内容到文件
