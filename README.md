@@ -437,7 +437,8 @@ claude-autonomous root
       "matcher": "*",
       "hooks": [{
         "type": "command",
-        "command": "claude-autonomous hook inject_state"
+        "command": "claude-autonomous hook inject_state",
+        "timeout": 5
       }]
     }],
     "PostToolUse": [
@@ -445,14 +446,16 @@ claude-autonomous root
         "matcher": "Write|Edit|Create",
         "hooks": [{
           "type": "command",
-          "command": "claude-autonomous hook progress_sync"
+          "command": "claude-autonomous hook progress_sync",
+          "timeout": 5
         }]
       },
       {
         "matcher": "Bash",
         "hooks": [{
           "type": "command",
-          "command": "claude-autonomous hook error_tracker"
+          "command": "claude-autonomous hook error_tracker",
+          "timeout": 5
         }]
       }
     ],
@@ -460,14 +463,16 @@ claude-autonomous root
       "matcher": "Bash",
       "hooks": [{
         "type": "command",
-        "command": "claude-autonomous hook codex_review_gate"
+        "command": "claude-autonomous hook codex_review_gate",
+        "timeout": 180
       }]
     }],
     "Stop": [{
       "matcher": "*",
       "hooks": [{
         "type": "command",
-        "command": "claude-autonomous hook loop_driver"
+        "command": "claude-autonomous hook loop_driver",
+        "timeout": 5
       }]
     }]
   }

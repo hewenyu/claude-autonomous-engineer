@@ -105,7 +105,10 @@ mod tests {
         });
 
         let result = run_hook("codex_review_gate", temp.path(), Some(&input)).unwrap();
-        assert_eq!(result["decision"], "allow");
+        assert_eq!(result["hookSpecificOutput"]["hookEventName"], "PreToolUse");
+        assert!(result["hookSpecificOutput"]
+            .get("permissionDecision")
+            .is_none());
     }
 
     #[test]

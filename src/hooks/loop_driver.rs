@@ -46,9 +46,9 @@ Action Required:
 
     // 情况2: 所有任务完成
     if roadmap.complete {
+        // Stop hook: allow stopping by OMITTING "decision".
         return Ok(json!({
-            "decision": "allow",
-            "reason": format!(r#"🎉 ALL TASKS COMPLETED!
+            "systemMessage": format!(r#"🎉 ALL TASKS COMPLETED!
 
 Summary:
 - Total tasks: {}
@@ -429,8 +429,8 @@ mod tests {
         fs::write(temp.path().join(".claude/status/ROADMAP.md"), roadmap).unwrap();
 
         let result = run_loop_driver_hook(temp.path()).unwrap();
-        assert_eq!(result["decision"], "allow");
-        assert!(result["reason"]
+        assert!(result.get("decision").is_none());
+        assert!(result["systemMessage"]
             .as_str()
             .unwrap()
             .contains("ALL TASKS COMPLETED"));

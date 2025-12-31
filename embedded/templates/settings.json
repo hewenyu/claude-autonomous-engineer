@@ -7,7 +7,7 @@
           {
             "type": "command",
             "command": "claude-autonomous hook inject_state",
-            "timeout": 5000
+            "timeout": 5
           }
         ]
       }
@@ -20,7 +20,7 @@
           {
             "type": "command",
             "command": "claude-autonomous hook codex_review_gate",
-            "timeout": 180000
+            "timeout": 180
           }
         ]
       }
@@ -33,7 +33,7 @@
           {
             "type": "command",
             "command": "claude-autonomous hook progress_sync",
-            "timeout": 5000
+            "timeout": 5
           }
         ]
       }
@@ -44,7 +44,7 @@
           {
             "type": "command",
             "command": "claude-autonomous hook error_tracker",
-            "timeout": 5000
+            "timeout": 5
           }
         ]
       }
@@ -57,7 +57,7 @@
           {
             "type": "command",
             "command": "claude-autonomous hook loop_driver",
-            "timeout": 5000
+            "timeout": 5
           }
         ]
       }

@@ -13,6 +13,24 @@ use crate::hooks::state_tracker::TaskStateTracker;
 use crate::utils::{get_staged_files, read_json};
 use crate::Memory;
 
+fn noop_pretooluse_output() -> Value {
+    json!({
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse"
+        }
+    })
+}
+
+fn deny_pretooluse(reason: String) -> Value {
+    json!({
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "deny",
+            "permissionDecisionReason": reason
+        }
+    })
+}
+
 /// 运行 codex_review_gate hook
 ///
 /// 检测 git commit 命令，根据任务状态转换进行差异化审查
@@ -22,9 +40,8 @@ pub fn run_codex_review_gate_hook(project_root: &Path, input: &Value) -> Result<
 
     // 检查是否是 git commit
     if !is_commit_command(&command) {
-        return Ok(json!({
-            "decision": "allow"
-        }));
+        // 不干预其他 Bash 命令，让 Claude Code 自己走权限流程
+        return Ok(noop_pretooluse_output());
     }
 
     eprintln!("🔍 Codex Review Gate: Analyzing commit...");
@@ -34,17 +51,13 @@ pub fn run_codex_review_gate_hook(project_root: &Path, input: &Value) -> Result<
         Ok(files) => files,
         Err(_) => {
             eprintln!("   ⚠️  No staged files found, allowing commit");
-            return Ok(json!({
-                "decision": "allow"
-            }));
+            return Ok(noop_pretooluse_output());
         }
     };
 
     if staged_files.is_empty() {
         eprintln!("   ⚠️  No staged files, allowing commit");
-        return Ok(json!({
-            "decision": "allow"
-        }));
+        return Ok(noop_pretooluse_output());
     }
 
     // 加载 memory.json 获取当前任务
@@ -55,10 +68,7 @@ pub fn run_codex_review_gate_hook(project_root: &Path, input: &Value) -> Result<
     // 如果没有当前任务，使用常规审查
     if current_task.id.is_none() {
         eprintln!("   📝 No current task, skipping review");
-        return Ok(json!({
-            "decision": "allow",
-            "reason": "No active task"
-        }));
+        return Ok(noop_pretooluse_output());
     }
 
     // 加载状态追踪器
@@ -106,10 +116,7 @@ pub fn run_codex_review_gate_hook(project_root: &Path, input: &Value) -> Result<
                     if is_transition && !result.state_transition_valid {
                         // 深度审查时，即使 PASS 也要检查状态转换有效性
                         eprintln!("   ❌ State transition is invalid");
-                        return Ok(json!({
-                            "decision": "block",
-                            "message": result.format_error_message()
-                        }));
+                        return Ok(deny_pretooluse(result.format_error_message()));
                     }
 
                     eprintln!("   ✅ Review PASSED");
@@ -120,10 +127,7 @@ pub fn run_codex_review_gate_hook(project_root: &Path, input: &Value) -> Result<
                         eprintln!("   💾 State snapshot updated");
                     }
 
-                    Ok(json!({
-                        "decision": "allow",
-                        "reason": "Code review passed"
-                    }))
+                    Ok(noop_pretooluse_output())
                 }
                 Verdict::Warn => {
                     eprintln!("   ⚠️  Review WARNINGS:");
@@ -135,17 +139,11 @@ pub fn run_codex_review_gate_hook(project_root: &Path, input: &Value) -> Result<
                         state_tracker.update_snapshot(current_task)?;
                         eprintln!("   💾 State snapshot updated");
                     }
-                    Ok(json!({
-                        "decision": "allow",
-                        "reason": "Code review passed with warnings"
-                    }))
+                    Ok(noop_pretooluse_output())
                 }
                 Verdict::Fail => {
                     eprintln!("   ❌ Review FAILED");
-                    Ok(json!({
-                        "decision": "block",
-                        "message": result.format_error_message()
-                    }))
+                    Ok(deny_pretooluse(result.format_error_message()))
                 }
             }
         }
@@ -154,10 +152,7 @@ pub fn run_codex_review_gate_hook(project_root: &Path, input: &Value) -> Result<
             eprintln!("   ⚠️  Codex review error: {}", e);
             eprintln!("   ℹ️  Allowing commit (review disabled due to error)");
 
-            Ok(json!({
-                "decision": "allow",
-                "reason": format!("Review error (allowing commit): {}", e)
-            }))
+            Ok(noop_pretooluse_output())
         }
     }
 }
@@ -192,7 +187,10 @@ mod tests {
         });
 
         let result = run_codex_review_gate_hook(temp.path(), &input).unwrap();
-        assert_eq!(result["decision"], "allow");
+        assert_eq!(result["hookSpecificOutput"]["hookEventName"], "PreToolUse");
+        assert!(result["hookSpecificOutput"]
+            .get("permissionDecision")
+            .is_none());
     }
 
     #[test]
