@@ -79,7 +79,8 @@ lazy_static! {
 /// 解析 codex review 输出
 pub fn parse_review_output(output: &str, mode: ReviewMode) -> Result<ReviewResult> {
     let mut verdict = Verdict::Fail;
-    let mut state_transition_valid = false;
+    // 非深度审查时该字段不适用：设为 true，避免误报“状态转换无效”
+    let mut state_transition_valid = mode != ReviewMode::Deep;
     let mut issues = Vec::new();
 
     // 解析 VERDICT

@@ -251,6 +251,7 @@ mod tests {
         manager.register_pre_hook(Box::new(TestPreHook {
             decision: HookDecision::Allow,
         }));
+        manager.register_post_hook(Box::new(TestPostHook));
 
         let context = TransitionContext {
             project_root: PathBuf::from("/tmp"),
@@ -262,6 +263,10 @@ mod tests {
 
         let decision = manager.run_pre_hooks(&context).unwrap();
         assert_eq!(decision, HookDecision::Allow);
+
+        // Post hooks 也应能正常执行
+        let state = MachineState::default();
+        manager.run_post_hooks(&context, &state).unwrap();
     }
 
     #[test]

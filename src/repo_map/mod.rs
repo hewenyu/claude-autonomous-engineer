@@ -111,7 +111,7 @@ impl RepoMapper {
             .git_ignore(true)
             .build();
 
-        let files: Vec<PathBuf> = walker
+        let mut files: Vec<PathBuf> = walker
             .filter_map(|entry| entry.ok())
             .filter(|e| e.file_type().map(|ft| ft.is_file()).unwrap_or(false))
             .map(|e| e.path().to_path_buf())
@@ -120,13 +120,17 @@ impl RepoMapper {
             .filter(|path| self.is_supported_language(path))
             .collect();
 
+        // 稳定输出顺序，避免 structure.md / cache.json 抖动
+        files.sort();
+
         Ok(files)
     }
 
     /// 检查文件是否是支持的语言
     fn is_supported_language(&self, path: &Path) -> bool {
         if let Some(ext) = path.extension() {
-            matches!(ext.to_str(), Some("rs") | Some("py") | Some("ts"))
+            // 当前实现仅提供 Rust 提取器；避免扫描未实现语言导致生成失败
+            matches!(ext.to_str(), Some("rs"))
         } else {
             false
         }
@@ -138,27 +142,37 @@ impl RepoMapper {
         let content = std::fs::read(file_path)?;
         let hash = cache::compute_hash(&content);
 
+        // 缓存 key 使用相对路径，避免跨机器/目录失效
+        let relative_path = file_path
+            .strip_prefix(&self.project_root)
+            .unwrap_or(file_path)
+            .to_path_buf();
+
         // 检查缓存
-        if let Some(cached) = self.cache.get(file_path, &hash) {
+        if let Some(cached) = self
+            .cache
+            .get(&relative_path, &hash)
+            .or_else(|| self.cache.get(file_path, &hash))
+        {
             return Ok(Some(cached));
         }
 
         // 解析文件
-        let language = self.detect_language(file_path)?;
+        let language = self.detect_language(&relative_path)?;
         let extractor = extractor::get_extractor(&language)?;
 
         let source = String::from_utf8_lossy(&content).to_string();
         let symbols = extractor.extract_symbols(&source)?;
 
         let file_symbols = FileSymbols {
-            file_path: file_path.to_path_buf(),
+            file_path: relative_path.clone(),
             language,
             symbols,
             hash: hash.clone(),
         };
 
         // 更新缓存
-        self.cache.insert(file_path, hash, file_symbols.clone());
+        self.cache.insert(&relative_path, hash, file_symbols.clone());
 
         Ok(Some(file_symbols))
     }
@@ -172,8 +186,6 @@ impl RepoMapper {
 
         Ok(match ext {
             "rs" => "rust",
-            "py" => "python",
-            "ts" => "typescript",
             _ => anyhow::bail!("Unsupported language: {}", ext),
         }
         .to_string())

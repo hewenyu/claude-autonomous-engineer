@@ -20,6 +20,25 @@ impl RustExtractor {
         })
     }
 
+    fn find_visibility_modifier(&self, node: &Node, source: &str) -> Option<String> {
+        if let Some(vis) = find_child_by_kind(node, "visibility_modifier") {
+            return Some(node_text(&vis, source).to_string());
+        }
+
+        // 兼容：某些节点上 visibility 可能被解析为兄弟节点（极少数情况）
+        self.find_sibling_before(node, "visibility_modifier", source)
+    }
+
+    fn has_modifier_token(&self, node: &Node, modifier: &str, source: &str) -> bool {
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            if node_text(&child, source).trim() == modifier {
+                return true;
+            }
+        }
+        false
+    }
+
     /// 提取函数签名
     fn extract_function(&self, node: &Node, source: &str) -> Option<Symbol> {
         let name_node = find_child_by_kind(node, "identifier")?;
@@ -42,13 +61,13 @@ impl RustExtractor {
         let mut parts = Vec::new();
 
         // 检查可见性
-        if let Some(vis) = self.find_sibling_before(node, "visibility_modifier", source) {
+        if let Some(vis) = self.find_visibility_modifier(node, source) {
             parts.push(vis);
         }
 
         // async/const/unsafe
         for modifier in ["async", "const", "unsafe"] {
-            if self.has_modifier_before(node, modifier, source) {
+            if self.has_modifier_token(node, modifier, source) {
                 parts.push(modifier.to_string());
             }
         }
@@ -91,7 +110,7 @@ impl RustExtractor {
         let mut signature = String::new();
 
         // 可见性
-        if let Some(vis) = self.find_sibling_before(node, "visibility_modifier", source) {
+        if let Some(vis) = self.find_visibility_modifier(node, source) {
             signature.push_str(&vis);
             signature.push(' ');
         }
@@ -137,7 +156,7 @@ impl RustExtractor {
         let mut signature = String::new();
 
         // 可见性
-        if let Some(vis) = self.find_sibling_before(node, "visibility_modifier", source) {
+        if let Some(vis) = self.find_visibility_modifier(node, source) {
             signature.push_str(&vis);
             signature.push(' ');
         }
@@ -169,13 +188,13 @@ impl RustExtractor {
         let mut signature = String::new();
 
         // 可见性
-        if let Some(vis) = self.find_sibling_before(node, "visibility_modifier", source) {
+        if let Some(vis) = self.find_visibility_modifier(node, source) {
             signature.push_str(&vis);
             signature.push(' ');
         }
 
         // unsafe
-        if self.has_modifier_before(node, "unsafe", source) {
+        if self.has_modifier_token(node, "unsafe", source) {
             signature.push_str("unsafe ");
         }
 
@@ -207,7 +226,7 @@ impl RustExtractor {
         let mut signature = String::new();
 
         // unsafe
-        if self.has_modifier_before(node, "unsafe", source) {
+        if self.has_modifier_token(node, "unsafe", source) {
             signature.push_str("unsafe ");
         }
 
@@ -257,25 +276,8 @@ impl RustExtractor {
     }
 
     /// 检查节点之前是否有特定修饰符
-    fn has_modifier_before(&self, node: &Node, modifier: &str, source: &str) -> bool {
-        let parent = node.parent();
-        if parent.is_none() {
-            return false;
-        }
-        let parent = parent.unwrap();
-        let mut cursor = parent.walk();
-
-        for child in parent.children(&mut cursor) {
-            if child.id() == node.id() {
-                break;
-            }
-            let text = node_text(&child, source);
-            if text == modifier {
-                return true;
-            }
-        }
-        false
-    }
+    // NOTE: 旧实现曾尝试从“父节点兄弟”里寻找修饰符；在 tree-sitter-rust 语法中，
+    // 大多数修饰符是 function_item/impl_item 的子节点，因此已由 `has_modifier_token` 覆盖。
 }
 
 impl LanguageExtractor for RustExtractor {

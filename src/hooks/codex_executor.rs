@@ -7,80 +7,11 @@ use crate::hooks::review_parser::{parse_review_output, ReviewResult};
 use anyhow::{Context, Result};
 use std::io::Write;
 use std::process::{Command, Stdio};
-use std::time::Duration;
-
-/// Codex review 命令超时时间（秒）
-const REVIEW_TIMEOUT_SECS: u64 = 30;
 
 /// 执行 codex review 命令
 pub fn execute_codex_review(context: &ReviewContext) -> Result<ReviewResult> {
-    println!("🤖 Invoking codex review...");
-
-    // 启动 codex 进程
-    let mut child = Command::new("codex")
-        .arg("review")
-        .arg("--uncommitted")
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .context("Failed to spawn codex process. Is 'codex' installed and in PATH?")?;
-
-    // 写入自定义指令到 stdin
-    if let Some(mut stdin) = child.stdin.take() {
-        stdin
-            .write_all(context.instruction.as_bytes())
-            .context("Failed to write to codex stdin")?;
-    }
-
-    // 等待执行完成（带超时）
-    let output = wait_with_timeout(child, Duration::from_secs(REVIEW_TIMEOUT_SECS))?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        anyhow::bail!("Codex review failed with exit code {:?}: {}", output.status.code(), stderr);
-    }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-
-    // 解析输出
-    parse_review_output(&stdout, context.mode.clone())
-}
-
-/// 等待进程完成（带超时）
-fn wait_with_timeout(
-    mut child: std::process::Child,
-    timeout: Duration,
-) -> Result<std::process::Output> {
-    use std::thread;
-    use std::time::Instant;
-
-    let start = Instant::now();
-
-    loop {
-        // 尝试非阻塞地检查进程状态
-        match child.try_wait()? {
-            Some(_status) => {
-                // 进程已完成，收集输出
-                return Ok(std::process::Output {
-                    status: _status,
-                    stdout: vec![], // 已经被 piped，需要手动读取
-                    stderr: vec![],
-                });
-            }
-            None => {
-                // 进程仍在运行，检查超时
-                if start.elapsed() > timeout {
-                    // 超时，杀死进程
-                    child.kill()?;
-                    anyhow::bail!("Codex review timed out after {:?}", timeout);
-                }
-
-                // 短暂睡眠，避免忙等待
-                thread::sleep(Duration::from_millis(100));
-            }
-        }
-    }
+    // 当前实现使用 `wait_with_output()`，避免自制超时逻辑导致 stdout/stderr 丢失。
+    execute_codex_review_simple(context)
 }
 
 /// 简化版本：直接使用 wait_with_output（实际使用此版本）

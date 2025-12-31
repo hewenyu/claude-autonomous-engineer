@@ -8,7 +8,7 @@ use super::hooks::{
 };
 use super::{MachineState, StateId, StateSnapshot};
 use anyhow::{bail, Context, Result};
-use git2::{Commit, Repository, Signature};
+use git2::{Commit, Repository, Signature, StatusOptions};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
@@ -87,6 +87,9 @@ impl GitStateMachine {
         task_id: Option<&str>,
         metadata: Option<serde_json::Value>,
     ) -> Result<String> {
+        // 0. 防止把用户已暂存的修改一起提交进“状态提交”
+        self.ensure_no_staged_changes()?;
+
         // 0. 获取当前状态（用于 hooks）
         let current_state = self.current_state()?;
 
@@ -139,11 +142,7 @@ impl GitStateMachine {
 
         let sig = self.get_signature()?;
 
-        let message = format!(
-            "state: {} | task: {}",
-            new_state_id.as_str(),
-            task_id.unwrap_or("none")
-        );
+        let message = format!("state: {} | task: {}", final_state_id.as_str(), task_id.unwrap_or("none"));
 
         // 获取 HEAD commit 作为 parent
         let parent_commit = match self.repo.head() {
@@ -279,6 +278,38 @@ impl GitStateMachine {
                     .context("Failed to create git signature")
             }
         }
+    }
+
+    /// 确保当前 index 中没有已暂存的用户修改
+    ///
+    /// 由于状态转换会创建一次 commit，如果 index 里存在其他暂存内容，
+    /// 会导致“状态提交”意外夹带用户变更。
+    fn ensure_no_staged_changes(&self) -> Result<()> {
+        let mut opts = StatusOptions::new();
+        opts.include_untracked(false)
+            .recurse_untracked_dirs(false)
+            .include_ignored(false)
+            .show(git2::StatusShow::IndexAndWorkdir);
+
+        let statuses = self.repo.statuses(Some(&mut opts))?;
+
+        let has_index_changes = statuses.iter().any(|e| {
+            let s = e.status();
+            s.is_index_new()
+                || s.is_index_modified()
+                || s.is_index_deleted()
+                || s.is_index_renamed()
+                || s.is_index_typechange()
+        });
+
+        if has_index_changes {
+            bail!(
+                "Refusing to create a state commit while there are staged changes in the index. \
+                 Please commit or unstage your changes first."
+            );
+        }
+
+        Ok(())
     }
 
     /// 检查仓库是否干净（无未提交的修改）

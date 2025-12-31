@@ -49,7 +49,7 @@ impl FileHashCache {
     }
 
     /// 保存缓存文件
-    pub fn save(&self, project_root: &Path) -> Result<()> {
+    pub fn save(&mut self, project_root: &Path) -> Result<()> {
         if !self.dirty {
             return Ok(());
         }
@@ -60,6 +60,9 @@ impl FileHashCache {
         let cache_file = cache_dir.join("cache.json");
         let content = serde_json::to_string_pretty(&self.cache)?;
         std::fs::write(cache_file, content)?;
+
+        // 成功写入后清理 dirty 标记，避免每次都重复写盘
+        self.dirty = false;
 
         Ok(())
     }
