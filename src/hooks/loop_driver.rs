@@ -7,6 +7,7 @@ use serde_json::{json, Value};
 use std::path::Path;
 
 use crate::state::{parse_roadmap, Memory};
+use crate::state_machine::{GitStateMachine, StateId};
 use crate::utils::{read_json, try_read_file};
 
 /// 最大重试次数
@@ -16,9 +17,13 @@ const MAX_CONSECUTIVE_ERRORS: usize = 10;
 /// 运行 loop_driver hook
 ///
 /// 检查 ROADMAP 完成状态，决定是否继续循环
+/// 同时执行自动状态转换
 pub fn run_loop_driver_hook(project_root: &Path) -> Result<Value> {
     let roadmap = check_roadmap(project_root)?;
     let stuck = check_stuck(project_root)?;
+
+    // 自动状态转换（在检查之前尝试）
+    let _ = auto_transition_state(project_root, &roadmap, &stuck);
 
     // 情况1: ROADMAP 不存在
     if !roadmap.exists {
@@ -228,6 +233,96 @@ fn check_stuck(project_root: &Path) -> Result<StuckStatus> {
         reason: String::new(),
         suggestion: String::new(),
     })
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// 自动状态转换
+// ═══════════════════════════════════════════════════════════════════
+
+/// 自动状态转换逻辑
+///
+/// 根据 ROADMAP 和任务状态自动转换状态机状态
+fn auto_transition_state(
+    project_root: &Path,
+    roadmap: &RoadmapStatus,
+    stuck: &StuckStatus,
+) -> Result<()> {
+    // 如果不是 git 仓库，跳过
+    let state_machine = match GitStateMachine::new(project_root) {
+        Ok(sm) => sm,
+        Err(_) => return Ok(()), // 非 git 项目，跳过状态转换
+    };
+
+    let current_state = state_machine.current_state()?;
+
+    // 加载 memory.json 获取任务信息
+    let memory_file = project_root.join(".claude/status/memory.json");
+    let memory: Memory = read_json(&memory_file).unwrap_or_default();
+    let task_id = memory.current_task.id.clone();
+
+    // 检测场景并执行相应的状态转换
+
+    // 场景 1: ROADMAP 完成 → Completed
+    if roadmap.complete && current_state.state_id != StateId::Completed {
+        println!("🎉 All tasks completed - transitioning to COMPLETED state");
+        let _ = state_machine.transition_to(
+            StateId::Completed,
+            task_id.as_deref(),
+            Some(serde_json::json!({
+                "completed_tasks": roadmap.completed,
+                "total_tasks": roadmap.total
+            })),
+        );
+        return Ok(());
+    }
+
+    // 场景 2: 系统卡住 → Blocked
+    if stuck.stuck && current_state.state_id != StateId::Blocked {
+        println!("🚫 System stuck - transitioning to BLOCKED state");
+        let _ = state_machine.transition_to(
+            StateId::Blocked,
+            task_id.as_deref(),
+            Some(serde_json::json!({
+                "reason": &stuck.reason,
+                "suggestion": &stuck.suggestion
+            })),
+        );
+        return Ok(());
+    }
+
+    // 场景 3: 有任务进行中 + 当前状态是 Idle → Coding
+    if roadmap.in_progress > 0
+        && task_id.is_some()
+        && current_state.state_id == StateId::Idle
+    {
+        println!("💻 Task started - transitioning to CODING state");
+        let _ = state_machine.transition_to(StateId::Coding, task_id.as_deref(), None);
+        return Ok(());
+    }
+
+    // 场景 4: 检测测试执行 (通过 error_history 判断)
+    let error_file = project_root.join(".claude/status/error_history.json");
+    let errors: Vec<Value> = read_json(&error_file).unwrap_or_default();
+
+    let recent_test_activity = errors.iter().rev().take(5).any(|e| {
+        e.get("error")
+            .and_then(|err| err.as_str())
+            .map(|s| {
+                s.contains("test") || s.contains("pytest") || s.contains("cargo test")
+            })
+            .unwrap_or(false)
+    });
+
+    if recent_test_activity && current_state.state_id == StateId::Coding {
+        println!("🧪 Test execution detected - transitioning to TESTING state");
+        let _ = state_machine.transition_to(StateId::Testing, task_id.as_deref(), None);
+        return Ok(());
+    }
+
+    // 场景 5: 测试失败（有未解决的测试错误）但不卡住 → 保持 Testing
+    // （这里不做状态转换，让 codex_review_gate 处理回滚）
+
+    Ok(())
 }
 
 #[cfg(test)]

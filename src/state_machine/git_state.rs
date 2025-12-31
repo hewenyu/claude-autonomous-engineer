@@ -2,10 +2,15 @@
 //!
 //! 使用 Git 的 commits 和 tags 作为状态快照存储机制
 
+use super::hooks::{
+    HookDecision, LoggingHook, PostTransitionHook, PreTransitionHook, TransitionContext,
+    TransitionHookManager, WorkflowValidationHook,
+};
 use super::{MachineState, StateId, StateSnapshot};
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use git2::{Commit, Repository, Signature};
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 
 /// Git 驱动的状态机
 pub struct GitStateMachine {
@@ -15,6 +20,8 @@ pub struct GitStateMachine {
     project_root: PathBuf,
     /// 状态文件路径
     state_file: PathBuf,
+    /// Hook 管理器
+    hook_manager: Arc<Mutex<TransitionHookManager>>,
 }
 
 impl GitStateMachine {
@@ -30,11 +37,35 @@ impl GitStateMachine {
             std::fs::create_dir_all(parent)?;
         }
 
+        // 创建 Hook 管理器并注册默认 hooks
+        let mut hook_manager = TransitionHookManager::new();
+
+        // PreTransition hooks
+        hook_manager.register_pre_hook(Box::new(WorkflowValidationHook));
+
+        // PostTransition hooks
+        hook_manager.register_post_hook(Box::new(LoggingHook));
+
         Ok(GitStateMachine {
             repo,
             project_root: project_root.to_path_buf(),
             state_file,
+            hook_manager: Arc::new(Mutex::new(hook_manager)),
         })
+    }
+
+    /// 注册自定义 PreTransition Hook
+    pub fn register_pre_hook(&self, hook: Box<dyn PreTransitionHook>) {
+        if let Ok(mut manager) = self.hook_manager.lock() {
+            manager.register_pre_hook(hook);
+        }
+    }
+
+    /// 注册自定义 PostTransition Hook
+    pub fn register_post_hook(&self, hook: Box<dyn PostTransitionHook>) {
+        if let Ok(mut manager) = self.hook_manager.lock() {
+            manager.register_post_hook(hook);
+        }
     }
 
     /// 获取当前状态
@@ -56,8 +87,37 @@ impl GitStateMachine {
         task_id: Option<&str>,
         metadata: Option<serde_json::Value>,
     ) -> Result<String> {
+        // 0. 获取当前状态（用于 hooks）
+        let current_state = self.current_state()?;
+
+        // 0.5. 创建转换上下文
+        let mut context = TransitionContext {
+            project_root: self.project_root.clone(),
+            from_state: current_state.state_id,
+            to_state: new_state_id,
+            task_id: task_id.map(|s| s.to_string()),
+            metadata: metadata.clone(),
+        };
+
+        // 0.6. 执行 PreTransition hooks
+        let final_state_id = if let Ok(manager) = self.hook_manager.lock() {
+            match manager.run_pre_hooks(&context)? {
+                HookDecision::Allow => new_state_id,
+                HookDecision::Block(reason) => {
+                    bail!("State transition blocked by hook: {}", reason);
+                }
+                HookDecision::Modify(modified_state) => {
+                    // Hook 修改了目标状态
+                    context.to_state = modified_state;
+                    modified_state
+                }
+            }
+        } else {
+            new_state_id
+        };
+
         // 1. 创建新状态
-        let mut state = MachineState::new(new_state_id, task_id.map(|s| s.to_string()));
+        let mut state = MachineState::new(final_state_id, task_id.map(|s| s.to_string()));
 
         if let Some(meta) = metadata {
             state = state.with_metadata(meta);
@@ -109,13 +169,18 @@ impl GitStateMachine {
         let tag_name = format!(
             "state-{}-{}-{}",
             chrono::Utc::now().format("%Y%m%d-%H%M%S"),
-            new_state_id.as_str(),
+            final_state_id.as_str(),
             task_id.unwrap_or("none")
         );
 
         let commit = self.repo.find_commit(commit_oid)?;
         self.repo
             .tag_lightweight(&tag_name, commit.as_object(), false)?;
+
+        // 6. 执行 PostTransition hooks
+        if let Ok(manager) = self.hook_manager.lock() {
+            let _ = manager.run_post_hooks(&context, &state);
+        }
 
         Ok(tag_name)
     }

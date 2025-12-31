@@ -7,13 +7,15 @@
 //! - 工作流编排
 
 pub mod git_state;
-pub mod workflow;
+pub mod hooks;
 pub mod visualizer;
+pub mod workflow;
 
 // 重导出核心类型
 pub use git_state::GitStateMachine;
-pub use workflow::*;
+pub use hooks::*;
 pub use visualizer::*;
+pub use workflow::*;
 
 use serde::{Deserialize, Serialize};
 
