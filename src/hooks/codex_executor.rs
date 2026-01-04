@@ -2,6 +2,7 @@
 //!
 //! 执行 codex review 命令并捕获输出
 
+use crate::hooks::codex_resolver::resolve_codex_path;
 use crate::hooks::review_context::ReviewContext;
 use crate::hooks::review_parser::{parse_review_output, ReviewResult};
 use anyhow::{Context, Result};
@@ -18,10 +19,10 @@ pub fn execute_codex_review(context: &ReviewContext) -> Result<ReviewResult> {
 pub fn execute_codex_review_simple(context: &ReviewContext) -> Result<ReviewResult> {
     eprintln!("🤖 Invoking codex exec...");
 
-    let codex_bin =
-        std::env::var("CLAUDE_AUTONOMOUS_CODEX_BIN").unwrap_or_else(|_| "codex".to_string());
+    let codex_bin = resolve_codex_path()
+        .context("Failed to resolve codex command path")?;
 
-    let mut child = Command::new(codex_bin)
+    let mut child = Command::new(&codex_bin)
         .arg("exec")
         .current_dir(&context.project_root)
         .stdin(Stdio::piped())
@@ -46,16 +47,8 @@ pub fn execute_codex_review_simple(context: &ReviewContext) -> Result<ReviewResu
     let stderr = String::from_utf8_lossy(&output.stderr);
 
     if !output.status.success() {
-        // 如果是因为 codex 命令不存在
-        if stderr.contains("not found") || stderr.contains("No such file") {
-            anyhow::bail!(
-                "Codex command not found. Please install codex CLI tool.\n\
-                 Visit: https://github.com/your-codex-repo (replace with actual URL)"
-            );
-        }
-
         anyhow::bail!(
-            "Codex review failed with exit code {:?}: {}",
+            "Codex review failed with exit code {:?}:\n{}",
             output.status.code(),
             stderr
         );

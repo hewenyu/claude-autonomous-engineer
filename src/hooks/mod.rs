@@ -12,6 +12,7 @@ pub mod runner;
 
 // Codex Review 相关模块
 pub mod codex_executor;
+pub mod codex_resolver;
 pub mod review_context;
 pub mod review_parser;
 pub mod state_tracker;
