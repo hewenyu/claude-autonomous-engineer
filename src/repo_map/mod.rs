@@ -131,8 +131,10 @@ impl RepoMapper {
     /// 检查文件是否是支持的语言
     fn is_supported_language(&self, path: &Path) -> bool {
         if let Some(ext) = path.extension() {
-            // 当前实现仅提供 Rust 提取器；避免扫描未实现语言导致生成失败
-            matches!(ext.to_str(), Some("rs"))
+            matches!(
+                ext.to_str(),
+                Some("rs" | "py" | "go" | "ts" | "tsx" | "js" | "jsx")
+            )
         } else {
             false
         }
@@ -189,6 +191,12 @@ impl RepoMapper {
 
         Ok(match ext {
             "rs" => "rust",
+            "py" => "python",
+            "go" => "go",
+            "ts" => "typescript",
+            "tsx" => "tsx",
+            "js" => "javascript",
+            "jsx" => "jsx",
             _ => anyhow::bail!("Unsupported language: {}", ext),
         }
         .to_string())

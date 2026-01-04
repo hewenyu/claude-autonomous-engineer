@@ -16,6 +16,20 @@ pub trait LanguageExtractor: Send + Sync {
 pub fn get_extractor(language: &str) -> Result<Box<dyn LanguageExtractor>> {
     match language {
         "rust" => Ok(Box::new(super::languages::rust::RustExtractor::new()?)),
+        "python" => Ok(Box::new(super::languages::python::PythonExtractor::new()?)),
+        "go" => Ok(Box::new(super::languages::go::GoExtractor::new()?)),
+        "typescript" => Ok(Box::new(
+            super::languages::typescript::TypeScriptExtractor::new()?,
+        )),
+        "tsx" => Ok(Box::new(
+            super::languages::typescript::TypeScriptExtractor::new_tsx()?,
+        )),
+        "javascript" => Ok(Box::new(
+            super::languages::javascript::JavaScriptExtractor::new()?,
+        )),
+        "jsx" => Ok(Box::new(
+            super::languages::javascript::JavaScriptExtractor::new()?,
+        )),
         _ => anyhow::bail!("Unsupported language: {}", language),
     }
 }
