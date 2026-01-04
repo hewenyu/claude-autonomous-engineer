@@ -2,7 +2,7 @@
 
 **让 Claude Code 真正实现自主工程 - 纯 Rust 实现，单一二进制**
 
-这是一个完整的 Claude Code 自主工程系统，将所有 hooks 和 agents 打包进单一的 Rust 二进制文件（仅 2MB）。通过智能的上下文注入、自动进度同步和代码审查，让 Claude 能够真正自主地完成复杂的工程任务。
+这是一个完整的 Claude Code 自主工程系统，将所有 hooks 和 agents 打包进单一的 Rust 二进制文件（~8MB，包含 5 种语言的 tree-sitter 支持）。通过智能的上下文注入、自动进度同步和代码审查，让 Claude 能够真正自主地完成复杂的工程任务。
 
 ## 🎯 这个工具解决什么问题？
 
@@ -104,7 +104,7 @@ Claude: "这个任务完成了"
   ✅ 降低"接口幻觉"风险
 ```
 
-## 📝 最近改进 (v1.0.9)
+## 📝 最近改进 (v1.0.13)
 
 ### ✨ 新增特性
 
@@ -155,22 +155,22 @@ cargo install claude-autonomous
 ### 方式 2: DEB 包（Debian/Ubuntu）
 
 ```bash
-wget https://github.com/hewenyu/claude-autonomous-engineer/releases/latest/download/claude-autonomous_1.0.9_amd64.deb
-sudo dpkg -i claude-autonomous_1.0.9_amd64.deb
+wget https://github.com/hewenyu/claude-autonomous-engineer/releases/latest/download/claude-autonomous_1.0.13_amd64.deb
+sudo dpkg -i claude-autonomous_1.0.13_amd64.deb
 ```
 
 ### 方式 3: RPM 包（Fedora/RHEL/CentOS）
 
 ```bash
-wget https://github.com/hewenyu/claude-autonomous-engineer/releases/latest/download/claude-autonomous-1.0.9-1.x86_64.rpm
-sudo rpm -i claude-autonomous-1.0.9-1.x86_64.rpm
+wget https://github.com/hewenyu/claude-autonomous-engineer/releases/latest/download/claude-autonomous-1.0.13-1.x86_64.rpm
+sudo rpm -i claude-autonomous-1.0.13-1.x86_64.rpm
 ```
 
 ### 验证安装
 
 ```bash
 claude-autonomous --version
-# claude-autonomous 1.0.9
+# claude-autonomous 1.0.13
 ```
 
 ## 🚀 快速开始
