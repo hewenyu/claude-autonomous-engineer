@@ -16,14 +16,13 @@ pub fn execute_codex_review(context: &ReviewContext) -> Result<ReviewResult> {
 
 /// 简化版本：直接使用 wait_with_output（实际使用此版本）
 pub fn execute_codex_review_simple(context: &ReviewContext) -> Result<ReviewResult> {
-    eprintln!("🤖 Invoking codex review...");
+    eprintln!("🤖 Invoking codex exec...");
 
     let codex_bin =
         std::env::var("CLAUDE_AUTONOMOUS_CODEX_BIN").unwrap_or_else(|_| "codex".to_string());
 
     let mut child = Command::new(codex_bin)
-        .arg("review")
-        .arg("--uncommitted")
+        .arg("exec")
         .current_dir(&context.project_root)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -43,9 +42,10 @@ pub fn execute_codex_review_simple(context: &ReviewContext) -> Result<ReviewResu
         .wait_with_output()
         .context("Failed to wait for codex")?;
 
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
 
+    if !output.status.success() {
         // 如果是因为 codex 命令不存在
         if stderr.contains("not found") || stderr.contains("No such file") {
             anyhow::bail!(
@@ -61,8 +61,18 @@ pub fn execute_codex_review_simple(context: &ReviewContext) -> Result<ReviewResu
         );
     }
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
+    // 组合 stdout 和 stderr - codex 可能将输出写到任一流
+    let combined_output = if stdout.is_empty() && !stderr.is_empty() {
+        eprintln!("⚠️  Warning: codex wrote output to stderr instead of stdout");
+        stderr.to_string()
+    } else if !stdout.is_empty() && !stderr.is_empty() {
+        // 两者都有内容，优先使用 stdout，但记录 stderr
+        eprintln!("⚠️  codex also wrote to stderr: {}", stderr);
+        stdout.to_string()
+    } else {
+        stdout.to_string()
+    };
 
     // 解析输出
-    parse_review_output(&stdout, context.mode.clone())
+    parse_review_output(&combined_output, context.mode.clone())
 }
