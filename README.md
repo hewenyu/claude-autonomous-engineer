@@ -84,7 +84,48 @@ Claude: "这个任务完成了"
   - 没有 → "所有任务完成！"
 ```
 
+### 🗺️ 多语言代码骨架提取 (Repository Map)
+使用 Tree-sitter 提取代码结构，显著减少 token 消耗：
+```
+支持语言：Rust, Python, Go, TypeScript, JavaScript
+提取内容：函数签名、类定义、接口、类型等
+
+示例输出 (TOON 格式):
+  path: example.py
+  symbols[3]:
+    Struct,User,"class User:"
+    Function,__init__,"def __init__(self, name: str):"
+    Function,greet,"async def greet(self) -> str:"
+
+优势：
+  ✅ 节省 30-60% tokens
+  ✅ BLAKE3 缓存 - 只解析修改的文件
+  ✅ 并行处理 - Rayon 多线程加速
+  ✅ 降低"接口幻觉"风险
+```
+
 ## 📝 最近改进 (v1.0.9)
+
+### ✨ 新增特性
+
+**Repository Map 多语言支持**
+
+新增对 **Python、Go、TypeScript/TSX、JavaScript/JSX** 的完整支持！
+
+现在 `claude-autonomous map` 命令可以提取以下语言的代码骨架：
+- 🦀 **Rust** - 完整支持（原有功能）
+- 🐍 **Python** - 类、函数、装饰器 (@staticmethod, @property)、async/await
+- 🐹 **Go** - 函数、方法(receiver)、结构体、接口、类型别名
+- 📘 **TypeScript/TSX** - 函数、类、接口、类型、React 组件、泛型
+- 📙 **JavaScript/JSX** - 函数、类、箭头函数、React 组件
+
+**技术实现**：
+- 使用 Tree-sitter 进行语言无关的 AST 解析
+- 每种语言约 300 行代码实现
+- Trait-based 架构，易于扩展新语言
+- 共享缓存、格式化、输出逻辑
+
+**测试验证**：在 `/tmp/multi-lang-test` 中测试了所有语言，成功提取 20 个符号！
 
 ### Bug 修复
 
@@ -230,7 +271,14 @@ claude-autonomous status
 
 ### 第四步（可选）：生成 Repository Map（代码骨架）
 
-Repository Map 会用 Tree-sitter 提取代码结构骨架（函数/结构体/impl 等），在上下文注入时显著减少 token 消耗，并降低“接口幻觉”风险。
+Repository Map 会用 Tree-sitter 提取代码结构骨架（函数/结构体/impl 等），在上下文注入时显著减少 token 消耗，并降低"接口幻觉"风险。
+
+**支持的编程语言**：
+- 🦀 **Rust** (.rs) - Function, Struct, Enum, Trait, Impl
+- 🐍 **Python** (.py) - Function, Class, Method, 装饰器, async/await
+- 🐹 **Go** (.go) - Function, Method, Struct, Interface, Type Alias
+- 📘 **TypeScript** (.ts, .tsx) - Function, Class, Interface, Type, Method
+- 📙 **JavaScript** (.js, .jsx) - Function, Class, Method, React 组件
 
 ```bash
 # 默认输出（推荐）：.claude/repo_map/structure.toon
@@ -242,6 +290,12 @@ claude-autonomous map --format markdown
 # 指定输出路径
 claude-autonomous map --output .claude/repo_map/structure.md --format markdown
 ```
+
+**特性**：
+- ✅ 自动识别文件语言并选择对应的 extractor
+- ✅ BLAKE3 哈希缓存 - 只重新解析修改过的文件
+- ✅ TOON 格式 - 节省 30-60% tokens
+- ✅ 并行处理 - 使用 Rayon 多线程加速
 
 说明：
 - `inject_state` 会优先读取 `.claude/repo_map/structure.toon`，不存在时再读取 `.claude/repo_map/structure.md`。
@@ -416,6 +470,7 @@ Claude: "TASK-003: 添加集成测试..."
 | **CLI 主程序** | Rust | 2MB | 命令行入口、Hook 执行 |
 | **State Manager** | Rust | - | 解析 ROADMAP、memory.json |
 | **Context Manager** | Rust | - | 智能上下文管理（token 预算控制） |
+| **Repository Mapper** | Rust | - | 多语言代码骨架提取（Tree-sitter） |
 | **Project Finder** | Rust | - | Git-like 根目录查找（支持 submodule） |
 | **Templates** | Embedded | - | 5 个 agents + CLAUDE.md 模板 |
 
@@ -658,12 +713,23 @@ cp ~/claude-templates/CLAUDE.md ~/new-project/
 
 ### Q: 支持哪些编程语言？
 
-**A**: 语言无关！系统只管理状态和流程，agents 可以处理任何语言：
+**A**: 系统本身是语言无关的 - agents 可以处理任何语言！
 
-- ✅ Rust, Go, Python, TypeScript, Java, C++...
-- ✅ Web (React, Vue, Next.js...)
-- ✅ Mobile (Swift, Kotlin...)
+**Repository Map (代码骨架提取)** 目前支持:
+- 🦀 **Rust** - Function, Struct, Enum, Trait, Impl
+- 🐍 **Python** - Function, Class, Method, 装饰器(@staticmethod 等), async/await
+- 🐹 **Go** - Function, Method (receiver), Struct, Interface, Type Alias
+- 📘 **TypeScript/TSX** - Function, Arrow Function, Class, Interface, Type, 泛型
+- 📙 **JavaScript/JSX** - Function, Arrow Function, Class, React 组件
+
+**其他语言** - Agents 可以处理任何语言:
+- ✅ Java, C++, C#, PHP, Ruby...
+- ✅ Web (React, Vue, Next.js, Angular...)
+- ✅ Mobile (Swift, Kotlin, Flutter...)
 - ✅ 任何有 TDD 支持的语言
+
+> 💡 **扩展提示**: 添加新语言的 Repository Map 支持只需 ~300 行代码。
+> 查看 `src/repo_map/languages/` 了解实现模式,欢迎贡献 PR!
 
 ### Q: 如何与现有 Git 工作流集成？
 
@@ -770,11 +836,13 @@ src/
 ├── main.rs                    # CLI 入口
 ├── lib.rs                     # 库导出
 ├── cli/                       # 命令行处理
-├── hooks/                     # 4 个 hook 实现
-│   ├── inject_state.rs
-│   ├── progress_sync.rs
-│   ├── codex_review_gate.rs
-│   └── loop_driver.rs
+├── hooks/                     # 6 个 hook 实现
+│   ├── claude_protocol.rs     # SessionStart - 注入协议
+│   ├── inject_state.rs        # UserPromptSubmit - 上下文注入
+│   ├── progress_sync.rs       # PostToolUse - 进度同步
+│   ├── error_tracker.rs       # PostToolUse - 错误追踪
+│   ├── codex_review_gate.rs   # PreToolUse - 代码审查门禁
+│   └── loop_driver.rs         # Stop - 循环控制
 ├── state/                     # 状态管理
 │   ├── models.rs              # Memory, Task 数据结构
 │   ├── parser.rs              # Markdown/YAML 解析
@@ -782,9 +850,25 @@ src/
 ├── context/                   # 上下文管理
 │   ├── manager.rs             # 上下文组装
 │   └── truncate.rs            # Token 预算控制
+├── repo_map/                  # Repository Mapping
+│   ├── mod.rs                 # 核心逻辑
+│   ├── extractor.rs           # 语言提取器 trait
+│   ├── parser.rs              # Tree-sitter 解析器
+│   ├── generator.rs           # Markdown 输出
+│   ├── generator_toon.rs      # TOON 格式输出
+│   ├── cache.rs               # BLAKE3 缓存
+│   └── languages/             # 语言特定提取器
+│       ├── rust.rs            # Rust 提取器
+│       ├── python.rs          # Python 提取器
+│       ├── go.rs              # Go 提取器
+│       ├── typescript.rs      # TypeScript/TSX 提取器
+│       └── javascript.rs      # JavaScript/JSX 提取器
 ├── project/                   # 项目管理
 │   ├── initializer.rs         # init 命令
 │   └── root_finder.rs         # 根目录查找
+├── state_machine/             # Git 状态机
+│   ├── git_state.rs           # Git 集成
+│   └── workflow.rs            # 状态转换
 ├── templates/                 # 资源嵌入
 │   ├── agents.rs              # Agent 模板
 │   └── files.rs               # 配置模板

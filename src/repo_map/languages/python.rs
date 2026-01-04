@@ -98,7 +98,7 @@ impl PythonExtractor {
             signature.push_str(node_text(&args_node, source));
         }
 
-        signature.push_str(":");
+        signature.push(':');
 
         Some(Symbol {
             kind: SymbolKind::Struct, // 使用 Struct 表示类

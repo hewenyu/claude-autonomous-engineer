@@ -228,10 +228,8 @@ impl GoExtractor {
                     if let Some(symbol) = self.extract_interface(node, source) {
                         symbols.push(symbol);
                     }
-                } else {
-                    if let Some(symbol) = self.extract_type_alias(node, source) {
-                        symbols.push(symbol);
-                    }
+                } else if let Some(symbol) = self.extract_type_alias(node, source) {
+                    symbols.push(symbol);
                 }
             }
             _ => {}
