@@ -282,10 +282,7 @@ mod tests {
 
     /// 创建一个模拟的 codex 可执行文件
     fn create_mock_codex(path: &Path) -> std::io::Result<()> {
-        fs::write(
-            path,
-            "#!/bin/sh\necho 'codex version 1.0.0'\nexit 0",
-        )?;
+        fs::write(path, "#!/bin/sh\necho 'codex version 1.0.0'\nexit 0")?;
 
         #[cfg(unix)]
         {

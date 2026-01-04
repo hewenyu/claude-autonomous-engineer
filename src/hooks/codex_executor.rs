@@ -19,8 +19,7 @@ pub fn execute_codex_review(context: &ReviewContext) -> Result<ReviewResult> {
 pub fn execute_codex_review_simple(context: &ReviewContext) -> Result<ReviewResult> {
     eprintln!("🤖 Invoking codex exec...");
 
-    let codex_bin = resolve_codex_path()
-        .context("Failed to resolve codex command path")?;
+    let codex_bin = resolve_codex_path().context("Failed to resolve codex command path")?;
 
     let mut child = Command::new(&codex_bin)
         .arg("exec")
