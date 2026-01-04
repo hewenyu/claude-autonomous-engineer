@@ -87,8 +87,8 @@ pub fn run_codex_review_gate_hook(project_root: &Path, input: &Value) -> Result<
     let mut retry_state: ReviewRetryState = read_json(&retry_state_file).unwrap_or_default();
 
     // 检查是否是同一个任务和相同的代码
-    let is_same_attempt =
-        retry_state.current_task_id == task_id && retry_state.last_staged_files_hash == staged_files_hash;
+    let is_same_attempt = retry_state.current_task_id == task_id
+        && retry_state.last_staged_files_hash == staged_files_hash;
 
     // 加载状态追踪器
     let mut state_tracker = TaskStateTracker::load(project_root)?;
