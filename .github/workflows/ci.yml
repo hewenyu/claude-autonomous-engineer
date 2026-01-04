@@ -38,14 +38,14 @@ jobs:
         run: |
           SIZE=$(du -h target/release/claude-autonomous | cut -f1)
           echo "Binary size: $SIZE"
-          # Check if binary is under 5MB
+          # Check if binary is under 10MB (includes tree-sitter for 5 languages)
           SIZE_BYTES=$(stat -c%s target/release/claude-autonomous)
-          MAX_SIZE=$((5 * 1024 * 1024))
+          MAX_SIZE=$((10 * 1024 * 1024))
           if [ $SIZE_BYTES -gt $MAX_SIZE ]; then
-            echo "❌ Binary size ($SIZE) exceeds 5MB limit"
+            echo "❌ Binary size ($SIZE) exceeds 10MB limit"
             exit 1
           fi
-          echo "✓ Binary size ($SIZE) is within 5MB limit"
+          echo "✓ Binary size ($SIZE) is within 10MB limit"
 
   build-deb:
     name: Build DEB Package

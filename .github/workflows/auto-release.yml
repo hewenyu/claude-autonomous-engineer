@@ -83,9 +83,10 @@ jobs:
             ## Claude Autonomous Engineering ${{ steps.version.outputs.VERSION_TAG }}
 
             ### Features
-            - ⚡ Zero Python dependencies - Pure Rust implementation
+            - ⚡ Zero Python dependencies - Pure Rust implementation (~8MB single binary)
             - 📦 5 embedded agents and all templates
-            - 🪝 4 built-in hooks (inject_state, progress_sync, codex_review_gate, loop_driver)
+            - 🪝 6 built-in hooks (claude_protocol, inject_state, progress_sync, error_tracker, codex_review_gate, loop_driver)
+            - 🗺️ Multi-language Repository Map support (Rust, Python, Go, TypeScript, JavaScript)
             - 🚀 Fast startup (< 50ms)
             - 📊 Rich CLI with colored output
 
