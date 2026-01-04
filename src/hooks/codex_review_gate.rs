@@ -5,14 +5,19 @@
 use anyhow::Result;
 use serde_json::{json, Value};
 use std::path::Path;
+use std::process::Command;
 
 use crate::hooks::codex_executor::execute_codex_review_simple;
 use crate::hooks::review_context::ReviewContext;
 use crate::hooks::review_parser::Verdict;
 use crate::hooks::state_tracker::TaskStateTracker;
 use crate::hooks::state_tracker::TransitionType;
-use crate::utils::{get_staged_files, read_json};
+use crate::state::models::ReviewRetryState;
+use crate::utils::{get_staged_files, read_json, write_json};
 use crate::Memory;
+
+/// 最大审查重试次数
+const MAX_REVIEW_RETRIES: u32 = 3;
 
 fn noop_pretooluse_output() -> Value {
     json!({
@@ -61,6 +66,9 @@ pub fn run_codex_review_gate_hook(project_root: &Path, input: &Value) -> Result<
         return Ok(noop_pretooluse_output());
     }
 
+    // 计算当前 staged files 的 hash
+    let staged_files_hash = compute_staged_files_hash(project_root)?;
+
     // 加载 memory.json 获取当前任务
     let memory_file = project_root.join(".claude/status/memory.json");
     let memory: Memory = read_json(&memory_file).unwrap_or_default();
@@ -72,11 +80,20 @@ pub fn run_codex_review_gate_hook(project_root: &Path, input: &Value) -> Result<
         return Ok(noop_pretooluse_output());
     }
 
+    let task_id = current_task.id.as_deref().unwrap_or("");
+
+    // 加载或初始化重试状态
+    let retry_state_file = project_root.join(".claude/status/review_retry_count.json");
+    let mut retry_state: ReviewRetryState = read_json(&retry_state_file).unwrap_or_default();
+
+    // 检查是否是同一个任务和相同的代码
+    let is_same_attempt =
+        retry_state.current_task_id == task_id && retry_state.last_staged_files_hash == staged_files_hash;
+
     // 加载状态追踪器
     let mut state_tracker = TaskStateTracker::load(project_root)?;
 
     // 如果这是该任务的首次提交，需要先落一份快照，否则后续永远检测不到转换
-    let task_id = current_task.id.as_deref().unwrap_or("");
     let has_snapshot =
         !task_id.is_empty() && state_tracker.get_previous_snapshot(task_id).is_some();
 
@@ -159,7 +176,80 @@ pub fn run_codex_review_gate_hook(project_root: &Path, input: &Value) -> Result<
                 }
                 Verdict::Fail => {
                     eprintln!("   ❌ Review FAILED");
-                    Ok(deny_pretooluse(result.format_error_message()))
+
+                    let failure_reason = result.format_error_message();
+
+                    // 更新重试状态
+                    if is_same_attempt {
+                        // 相同的代码被再次拒绝
+                        retry_state.consecutive_failures += 1;
+                    } else {
+                        // 新的尝试，重置计数
+                        retry_state.consecutive_failures = 1;
+                        retry_state.current_task_id = task_id.to_string();
+                        retry_state.last_staged_files_hash = staged_files_hash;
+                        retry_state.failure_reasons.clear();
+                    }
+
+                    retry_state.last_failure_timestamp = chrono::Utc::now().to_rfc3339();
+                    retry_state.failure_reasons.push(failure_reason.clone());
+
+                    // 保存重试状态
+                    let _ = write_json(&retry_state_file, &retry_state);
+
+                    // 检查是否超过重试限制
+                    if retry_state.consecutive_failures >= MAX_REVIEW_RETRIES {
+                        // 记录到 error_history.json
+                        let error_file = project_root.join(".claude/status/error_history.json");
+                        let mut errors: Vec<Value> = read_json(&error_file).unwrap_or_default();
+
+                        errors.push(json!({
+                            "task": task_id,
+                            "kind": "codex_review_failure",
+                            "command": "git commit",
+                            "error": failure_reason.clone(),
+                            "attempted_fix": Value::Null,
+                            "resolution": Value::Null,
+                            "timestamp": chrono::Utc::now().to_rfc3339(),
+                        }));
+
+                        let _ = write_json(&error_file, &errors);
+
+                        // 返回特殊的错误消息
+                        Ok(deny_pretooluse(format!(
+                            r#"❌ Code Review Failed ({}/{}):
+
+{}
+
+⚠️ RETRY LIMIT EXCEEDED
+
+The same code has been rejected {} times. This suggests a fundamental issue.
+
+Recommended actions:
+1. Try a completely different implementation approach
+2. Skip review temporarily: export SKIP_CODEX_REVIEW=1 && git commit
+3. Mark task as BLOCKED: Edit ROADMAP.md and change [ ] to [!]
+4. Review the task requirements in TASK-{}.md
+
+Previous failures:
+{}
+"#,
+                            retry_state.consecutive_failures,
+                            MAX_REVIEW_RETRIES,
+                            failure_reason,
+                            retry_state.consecutive_failures,
+                            task_id,
+                            retry_state.failure_reasons.join("\n---\n")
+                        )))
+                    } else {
+                        // 正常的失败消息
+                        Ok(deny_pretooluse(format!(
+                            "❌ Code Review Failed (Attempt {}/{}):\n\n{}\n\n💡 Fix the issues above and try again.",
+                            retry_state.consecutive_failures,
+                            MAX_REVIEW_RETRIES,
+                            failure_reason
+                        )))
+                    }
                 }
             }
         }
@@ -198,6 +288,25 @@ fn extract_command(input: &Value) -> String {
 /// 检查是否是提交命令
 fn is_commit_command(command: &str) -> bool {
     command.contains("git commit")
+}
+
+/// 计算 staged files 的 SHA256 hash
+///
+/// 用于检测代码是否有实质性修改
+fn compute_staged_files_hash(project_root: &Path) -> Result<String> {
+    use sha2::{Digest, Sha256};
+
+    let output = Command::new("git")
+        .arg("diff")
+        .arg("--cached")
+        .current_dir(project_root)
+        .output()?;
+
+    let diff = String::from_utf8_lossy(&output.stdout);
+    let mut hasher = Sha256::new();
+    hasher.update(diff.as_bytes());
+    let hash = format!("{:x}", hasher.finalize());
+    Ok(hash)
 }
 
 #[cfg(test)]

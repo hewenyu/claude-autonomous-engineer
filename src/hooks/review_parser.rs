@@ -130,6 +130,21 @@ pub fn parse_review_output(output: &str, mode: ReviewMode) -> Result<ReviewResul
         });
     }
 
+    // 如果审查失败但没有提取到具体问题，返回原始输出作为问题
+    if verdict == Verdict::Fail && issues.is_empty() {
+        eprintln!("⚠️  Warning: Review FAILED but no specific issues were extracted");
+        eprintln!("Raw output:\n{}", output);
+
+        // 将原始输出作为一个 Critical issue
+        issues.push(Issue {
+            severity: Severity::Critical,
+            description: format!(
+                "Review failed but no specific issues were parsed. Raw codex output:\n\n{}",
+                output
+            ),
+        });
+    }
+
     Ok(ReviewResult {
         verdict,
         state_transition_valid,

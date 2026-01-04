@@ -251,3 +251,27 @@ pub struct PhasePlan {
     pub phase_name: String,
     pub status: String,
 }
+
+/// Review 重试状态 - 用于跟踪 codex review 的失败尝试
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ReviewRetryState {
+    /// 当前任务 ID
+    #[serde(default)]
+    pub current_task_id: String,
+
+    /// 连续失败次数
+    #[serde(default)]
+    pub consecutive_failures: u32,
+
+    /// 最后失败时间戳
+    #[serde(default)]
+    pub last_failure_timestamp: String,
+
+    /// 最后一次 staged files 的 hash（用于检测代码是否有实质性修改）
+    #[serde(default)]
+    pub last_staged_files_hash: String,
+
+    /// 失败原因列表（保留历史记录）
+    #[serde(default)]
+    pub failure_reasons: Vec<String>,
+}
