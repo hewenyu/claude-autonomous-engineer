@@ -66,6 +66,7 @@ Claude: "继续 TASK-002: 实现登录功能..."
 git commit -m "实现用户注册"
 
 [系统自动触发审查]
+→ 智能查找 codex 命令（支持 nvm、project-local）
 → 检查是否符合 API 契约
 → 检查是否有测试
 → 检查代码质量
@@ -73,6 +74,12 @@ git commit -m "实现用户注册"
 ✓ 审查通过 → 允许提交
 ✗ 审查失败 → 阻止提交 + 反馈问题
 ```
+
+**Codex 路径智能解析**：系统会自动在以下位置查找 codex 命令：
+1. 环境变量 `CLAUDE_AUTONOMOUS_CODEX_BIN`（最高优先级）
+2. 系统 PATH
+3. nvm 目录 `~/.nvm/versions/node/*/bin/codex`（自动选择最新版本）
+4. 项目本地 `./node_modules/.bin/codex`
 
 ### 🔁 自主循环控制
 ```
@@ -104,9 +111,32 @@ Claude: "这个任务完成了"
   ✅ 降低"接口幻觉"风险
 ```
 
-## 📝 最近改进 (v1.0.13)
+## 📝 最近改进 (v1.0.14)
 
 ### ✨ 新增特性
+
+**智能 Codex 路径解析**
+
+不再依赖环境变量！系统现在会自动在多个位置智能搜索 codex 命令：
+
+- 🔍 **4 级搜索策略**：环境变量 → 系统 PATH → nvm 目录 → 项目本地
+- 🚀 **nvm 支持**：自动扫描 `~/.nvm/versions/node/*/bin/codex`，选择最新版本
+- 📦 **项目本地支持**：自动查找 `./node_modules/.bin/codex`（向上 5 层）
+- ⚡ **会话级缓存**：首次查找后缓存结果，后续调用 <1μs
+- 🎯 **精准验证**：检查文件存在性、可执行权限、运行 `--version` 验证
+- 💡 **详细错误提示**：找不到 codex 时显示所有搜索位置和安装建议
+
+**技术实现**：
+- 新增 `src/hooks/codex_resolver.rs` 模块（~300 行）
+- 使用 `std::sync::OnceLock` 实现线程安全缓存
+- 遵循项目现有的多策略路径查找模式
+- 零新增依赖 - 使用已有的 `anyhow`、`dirs`、`std::process`
+
+**用户体验提升**：
+- ✅ nvm 用户无需配置 - 自动找到 codex
+- ✅ 项目本地安装自动识别
+- ✅ 环境变量仍可作为最高优先级覆盖
+- ✅ 清晰的错误信息指导安装
 
 **Repository Map 多语言支持**
 
@@ -625,6 +655,41 @@ claude-autonomous root
 
 ## ❓ 常见问题
 
+### Q: 如何配置 codex 命令路径？
+
+**A**: 系统会自动智能查找 codex，无需手动配置！
+
+**自动查找顺序**：
+1. **环境变量** `CLAUDE_AUTONOMOUS_CODEX_BIN`（最高优先级）
+2. **系统 PATH** - 直接执行 `codex --version`
+3. **nvm 目录** - `~/.nvm/versions/node/*/bin/codex`（自动选择最新版本）
+4. **项目本地** - `./node_modules/.bin/codex`（向上查找 5 层）
+
+**手动配置（可选）**：
+```bash
+# 设置环境变量指定 codex 路径
+export CLAUDE_AUTONOMOUS_CODEX_BIN=/path/to/codex
+
+# 或添加到 shell 配置文件
+echo 'export CLAUDE_AUTONOMOUS_CODEX_BIN=/home/user/.nvm/versions/node/v24.11.0/bin/codex' >> ~/.bashrc
+```
+
+**错误排查**：
+如果系统找不到 codex，会显示详细的搜索位置和安装建议：
+```
+Codex command not found in any of the following locations:
+1. Environment variable: CLAUDE_AUTONOMOUS_CODEX_BIN (not set)
+2. System PATH (command 'codex' not found)
+3. nvm directories: ~/.nvm/versions/node/*/bin/codex (not found)
+4. Project-local: ./node_modules/.bin/codex (not found)
+
+💡 Installation suggestions:
+- Install via npm: npm install -g @anthropic-ai/codex
+- Or set CLAUDE_AUTONOMOUS_CODEX_BIN to the full path
+- Detected nvm at: ~/.nvm
+  Try: nvm use <version> && npm install -g @anthropic-ai/codex
+```
+
 ### Q: 如何让 Claude 停止自主循环？
 
 **A**: loop_driver hook 会自动检查 ROADMAP。如果想手动停止：
@@ -836,12 +901,17 @@ src/
 ├── main.rs                    # CLI 入口
 ├── lib.rs                     # 库导出
 ├── cli/                       # 命令行处理
-├── hooks/                     # 6 个 hook 实现
+├── hooks/                     # 6 个 hook 实现 + codex 路径解析
 │   ├── claude_protocol.rs     # SessionStart - 注入协议
 │   ├── inject_state.rs        # UserPromptSubmit - 上下文注入
 │   ├── progress_sync.rs       # PostToolUse - 进度同步
 │   ├── error_tracker.rs       # PostToolUse - 错误追踪
 │   ├── codex_review_gate.rs   # PreToolUse - 代码审查门禁
+│   ├── codex_resolver.rs      # Codex 路径智能解析（支持 nvm）
+│   ├── codex_executor.rs      # Codex 命令执行器
+│   ├── review_context.rs      # 审查上下文构建
+│   ├── review_parser.rs       # 审查结果解析
+│   ├── state_tracker.rs       # 状态追踪
 │   └── loop_driver.rs         # Stop - 循环控制
 ├── state/                     # 状态管理
 │   ├── models.rs              # Memory, Task 数据结构
