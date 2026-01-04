@@ -22,10 +22,12 @@ impl GoExtractor {
 
     /// 提取函数定义
     fn extract_function(&self, node: &Node, source: &str) -> Option<Symbol> {
-        let name_node = find_child_by_kind(node, "identifier")?;
+        // 方法名是 field_identifier，函数名是 identifier
+        let name_node = find_child_by_kind(node, "field_identifier")
+            .or_else(|| find_child_by_kind(node, "identifier"))?;
         let name = node_text(&name_node, source).to_string();
 
-        let signature = self.build_function_signature(node, source);
+        let signature = self.build_function_signature(node, source, &name);
 
         Some(Symbol {
             kind: SymbolKind::Function,
@@ -37,157 +39,95 @@ impl GoExtractor {
     }
 
     /// 构建函数签名
-    fn build_function_signature(&self, node: &Node, source: &str) -> String {
+    fn build_function_signature(&self, node: &Node, source: &str, name: &str) -> String {
         let mut parts = Vec::new();
-
-        // func 关键字
         parts.push("func".to_string());
 
-        // 接收者（如果是方法）
-        if let Some(receiver) = find_child_by_kind(node, "parameter_list") {
-            // 第一个 parameter_list 可能是接收者
-            let text = node_text(&receiver, source);
-            if text.starts_with('(') && !text.contains(')') || text.len() < 50 {
-                parts.push(text.to_string());
-            }
-        }
-
-        // 函数名
-        if let Some(name_node) = find_child_by_kind(node, "identifier") {
-            parts.push(node_text(&name_node, source).to_string());
-        }
-
-        // 参数列表
-        let mut found_params = false;
+        // 收集所有 parameter_list（方法会有 receiver + params，函数只有 params）
+        let mut param_lists = Vec::new();
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
-            if child.kind() == "parameter_list" && !found_params {
-                // 跳过接收者，找实际参数
-                if found_params {
-                    parts.push(node_text(&child, source).to_string());
-                    break;
-                }
-                found_params = true;
-                parts.push(node_text(&child, source).to_string());
+            if child.kind() == "parameter_list" {
+                param_lists.push(child);
             }
         }
 
-        // 返回类型
-        if let Some(result) = self.find_result_type(node, source) {
-            parts.push(result);
+        // 如果有两个 parameter_list，第一个是 receiver（方法）
+        if param_lists.len() == 2 {
+            parts.push(node_text(&param_lists[0], source).to_string());
+        }
+
+        // 函数/方法名
+        parts.push(name.to_string());
+
+        // 参数列表（方法的第二个 parameter_list，函数的第一个）
+        if !param_lists.is_empty() {
+            let params = param_lists.last().unwrap();
+            parts.push(node_text(params, source).to_string());
+        }
+
+        // 返回类型（在最后一个 parameter_list 之后的类型节点）
+        let mut found_last_params = false;
+        let last_params_id = param_lists.last().map(|n| n.id());
+
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            if Some(child.id()) == last_params_id {
+                found_last_params = true;
+                continue;
+            }
+
+            if found_last_params {
+                match child.kind() {
+                    "type_identifier" | "pointer_type" | "slice_type" | "array_type"
+                    | "struct_type" | "interface_type" | "qualified_type" => {
+                        parts.push(node_text(&child, source).to_string());
+                        break;
+                    }
+                    _ => {}
+                }
+            }
         }
 
         format!("{};", parts.join(" "))
     }
 
-    /// 查找返回类型
-    fn find_result_type(&self, node: &Node, source: &str) -> Option<String> {
-        let mut cursor = node.walk();
-        for child in node.children(&mut cursor) {
-            match child.kind() {
-                "parameter_list" => {
-                    // 最后一个 parameter_list 可能是返回类型
-                    let text = node_text(&child, source);
-                    if text.starts_with('(') {
-                        return Some(text.to_string());
-                    }
-                }
-                "type_identifier" | "pointer_type" | "slice_type" | "array_type" => {
-                    return Some(node_text(&child, source).to_string());
-                }
-                _ => continue,
-            }
+    /// 提取类型声明（结构体、接口、类型别名）
+    fn extract_type_declaration(&self, node: &Node, source: &str) -> Option<Symbol> {
+        // type_declaration 包含 type_spec
+        let type_spec = find_child_by_kind(node, "type_spec")?;
+        let name_node = find_child_by_kind(&type_spec, "type_identifier")?;
+        let name = node_text(&name_node, source).to_string();
+
+        // 优先检查是否有 struct_type 或 interface_type
+        if find_child_by_kind(&type_spec, "struct_type").is_some() {
+            return Some(Symbol {
+                kind: SymbolKind::Struct,
+                name: name.clone(),
+                signature: format!("type {} struct {{ ... }}", name),
+                line_start: node.start_position().row + 1,
+                line_end: node.end_position().row + 1,
+            });
         }
-        None
-    }
 
-    /// 提取结构体定义
-    fn extract_struct(&self, node: &Node, source: &str) -> Option<Symbol> {
-        // 查找 type_spec 节点
-        let type_spec = if node.kind() == "type_spec" {
-            node
-        } else {
-            &find_child_by_kind(node, "type_spec")?
-        };
+        if find_child_by_kind(&type_spec, "interface_type").is_some() {
+            return Some(Symbol {
+                kind: SymbolKind::Trait,
+                name: name.clone(),
+                signature: format!("type {} interface {{ ... }}", name),
+                line_start: node.start_position().row + 1,
+                line_end: node.end_position().row + 1,
+            });
+        }
 
-        let name_node = find_child_by_kind(type_spec, "type_identifier")?;
-        let name = node_text(&name_node, source).to_string();
-
-        let mut signature = String::new();
-        signature.push_str("type ");
-        signature.push_str(&name);
-        signature.push_str(" struct { ... }");
-
-        Some(Symbol {
-            kind: SymbolKind::Struct,
-            name,
-            signature,
-            line_start: node.start_position().row + 1,
-            line_end: node.end_position().row + 1,
-        })
-    }
-
-    /// 提取接口定义
-    fn extract_interface(&self, node: &Node, source: &str) -> Option<Symbol> {
-        let type_spec = if node.kind() == "type_spec" {
-            node
-        } else {
-            &find_child_by_kind(node, "type_spec")?
-        };
-
-        let name_node = find_child_by_kind(type_spec, "type_identifier")?;
-        let name = node_text(&name_node, source).to_string();
-
-        let mut signature = String::new();
-        signature.push_str("type ");
-        signature.push_str(&name);
-        signature.push_str(" interface { ... }");
-
-        Some(Symbol {
-            kind: SymbolKind::Trait, // 使用 Trait 表示接口
-            name,
-            signature,
-            line_start: node.start_position().row + 1,
-            line_end: node.end_position().row + 1,
-        })
-    }
-
-    /// 提取类型别名
-    fn extract_type_alias(&self, node: &Node, source: &str) -> Option<Symbol> {
-        let name_node = find_child_by_kind(node, "type_identifier")?;
-        let name = node_text(&name_node, source).to_string();
-
-        let signature = format!("type {} = ...", name);
-
+        // 其他情况是类型别名
         Some(Symbol {
             kind: SymbolKind::Type,
-            name,
-            signature,
+            name: name.clone(),
+            signature: format!("type {} = ...", name),
             line_start: node.start_position().row + 1,
             line_end: node.end_position().row + 1,
         })
-    }
-
-    /// 检查节点是否包含结构体定义
-    fn has_struct_type(&self, node: &Node) -> bool {
-        let mut cursor = node.walk();
-        for child in node.children(&mut cursor) {
-            if child.kind() == "struct_type" {
-                return true;
-            }
-        }
-        false
-    }
-
-    /// 检查节点是否包含接口定义
-    fn has_interface_type(&self, node: &Node) -> bool {
-        let mut cursor = node.walk();
-        for child in node.children(&mut cursor) {
-            if child.kind() == "interface_type" {
-                return true;
-            }
-        }
-        false
     }
 }
 
@@ -219,16 +159,7 @@ impl GoExtractor {
                 }
             }
             "type_declaration" => {
-                // Go 的 type 声明可以是 struct, interface, 或 type alias
-                if self.has_struct_type(node) {
-                    if let Some(symbol) = self.extract_struct(node, source) {
-                        symbols.push(symbol);
-                    }
-                } else if self.has_interface_type(node) {
-                    if let Some(symbol) = self.extract_interface(node, source) {
-                        symbols.push(symbol);
-                    }
-                } else if let Some(symbol) = self.extract_type_alias(node, source) {
+                if let Some(symbol) = self.extract_type_declaration(node, source) {
                     symbols.push(symbol);
                 }
             }
