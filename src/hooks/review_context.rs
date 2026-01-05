@@ -46,8 +46,19 @@ impl ReviewContext {
         // 加载 API 契约
         let api_contract = read_api_contract(project_root)?;
 
-        // 加载 ROADMAP 摘要
-        let roadmap_summary = summarize_roadmap(project_root)?;
+        // 加载完整 ROADMAP
+        let roadmap_full = read_full_roadmap(project_root)?;
+
+        // 获取当前 phase 编号
+        let current_phase = get_current_phase_number(project_root)?;
+
+        // 加载当前 phase plan
+        let phase_plan = read_phase_plan(project_root, current_phase)?
+            .unwrap_or_else(|| "*No PHASE_PLAN found for current phase*".to_string());
+
+        // 加载前一阶段摘要
+        let prev_phase_summary = read_previous_phase_summary(project_root, current_phase)?
+            .unwrap_or_else(|| "*No previous phase summary (this is phase 1)*".to_string());
 
         let prev_status = previous_snapshot
             .as_ref()
@@ -78,7 +89,13 @@ impl ReviewContext {
 ## API Contract Validation
 {}
 
-## Overall Progress
+## Full Project Roadmap
+{}
+
+## Current Phase Plan
+{}
+
+## Previous Phase Context
 {}
 
 ## State Transition Review Checklist
@@ -105,7 +122,9 @@ ISSUES:
             task_spec,
             diff,
             api_contract,
-            roadmap_summary,
+            roadmap_full,
+            phase_plan,
+            prev_phase_summary,
         );
 
         Ok(ReviewContext {
@@ -126,6 +145,20 @@ ISSUES:
         // 加载 API 契约
         let api_contract = read_api_contract(project_root)?;
 
+        // 加载完整 ROADMAP
+        let roadmap_full = read_full_roadmap(project_root)?;
+
+        // 获取当前 phase 编号
+        let current_phase = get_current_phase_number(project_root)?;
+
+        // 加载当前 phase plan
+        let phase_plan = read_phase_plan(project_root, current_phase)?
+            .unwrap_or_else(|| "*No PHASE_PLAN found for current phase*".to_string());
+
+        // 加载前一阶段摘要
+        let prev_phase_summary = read_previous_phase_summary(project_root, current_phase)?
+            .unwrap_or_else(|| "*No previous phase summary (this is phase 1)*".to_string());
+
         // 构建常规审查指令
         let instruction = format!(
             r#"# Code Review - Task In Progress
@@ -137,6 +170,15 @@ ISSUES:
 {}
 
 ## API Contract
+{}
+
+## Full Project Roadmap
+{}
+
+## Current Phase Plan
+{}
+
+## Previous Phase Context
 {}
 
 ## Regular Review Checklist
@@ -151,7 +193,12 @@ VERDICT: PASS | FAIL | WARN
 ISSUES:
 - [Severity: ERROR|WARN] Description
 "#,
-            task_spec, diff, api_contract,
+            task_spec,
+            diff,
+            api_contract,
+            roadmap_full,
+            phase_plan,
+            prev_phase_summary,
         );
 
         Ok(ReviewContext {
@@ -268,18 +315,104 @@ fn read_api_contract(project_root: &Path) -> Result<String> {
     }
 }
 
-/// 总结 ROADMAP
-fn summarize_roadmap(project_root: &Path) -> Result<String> {
+/// 读取完整 ROADMAP
+fn read_full_roadmap(project_root: &Path) -> Result<String> {
     let roadmap_file = project_root.join(".claude/status/ROADMAP.md");
 
     match try_read_file(&roadmap_file) {
-        Some(content) => {
-            // 提取前 20 行作为摘要
-            let lines: Vec<&str> = content.lines().take(20).collect();
-            Ok(lines.join("\n"))
-        }
+        Some(content) => Ok(content), // 返回完整内容，不再截取前 20 行
         None => Ok("*No ROADMAP found*".to_string()),
     }
+}
+
+/// 从 memory.json 中获取当前 phase 编号
+fn get_current_phase_number(project_root: &Path) -> Result<u32> {
+    use crate::utils::read_json;
+    use crate::state::Memory;
+
+    let memory_file = project_root.join(".claude/status/memory.json");
+    let memory: Memory = read_json(&memory_file).unwrap_or_default();
+
+    // 从 memory.progress.current_phase 解析编号
+    if let Some(phase_str) = memory.progress.current_phase {
+        // 可能的格式: "1", "Phase 1", "phase-1" 等
+        let num_str: String = phase_str.chars()
+            .filter(|c| c.is_ascii_digit())
+            .collect();
+
+        if let Ok(num) = num_str.parse::<u32>() {
+            return Ok(num);
+        }
+    }
+
+    // 默认为 phase 1
+    Ok(1)
+}
+
+/// 读取当前阶段的 PHASE_PLAN.md
+fn read_phase_plan(project_root: &Path, phase_number: u32) -> Result<Option<String>> {
+    // 搜索 .claude/phases/phase-{N}_*/PHASE_PLAN.md
+    let phases_dir = project_root.join(".claude/phases");
+
+    if !phases_dir.is_dir() {
+        return Ok(None);
+    }
+
+    // 查找匹配 phase-{N}_ 前缀的目录
+    let entries = std::fs::read_dir(&phases_dir)?;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+
+        let dir_name = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("");
+
+        // 匹配 phase-N_ 格式
+        if dir_name.starts_with(&format!("phase-{}_", phase_number)) {
+            let plan_file = path.join("PHASE_PLAN.md");
+            if let Some(content) = try_read_file(&plan_file) {
+                return Ok(Some(content));
+            }
+        }
+    }
+
+    Ok(None)
+}
+
+/// 提取文档摘要
+fn extract_summary(content: &str) -> String {
+    // 查找 "## Summary" section
+    if let Some(pos) = content.find("## Summary") {
+        let after_summary = &content[pos..];
+        if let Some(next_section) = after_summary.find("\n## ") {
+            return after_summary[..next_section].to_string();
+        }
+    }
+
+    // 如果没有 Summary section，返回前 30 行
+    content.lines().take(30).collect::<Vec<_>>().join("\n")
+}
+
+/// 读取前一阶段的摘要
+fn read_previous_phase_summary(project_root: &Path, current_phase: u32) -> Result<Option<String>> {
+    if current_phase <= 1 {
+        return Ok(None); // 第一阶段没有前置阶段
+    }
+
+    let prev_phase = current_phase - 1;
+
+    // 尝试读取前一阶段的 PHASE_PLAN.md，提取摘要部分
+    if let Some(plan_content) = read_phase_plan(project_root, prev_phase)? {
+        // 提取 "## Summary" 或前 30 行作为摘要
+        let summary = extract_summary(&plan_content);
+        return Ok(Some(format!("Phase {} Summary:\n{}", prev_phase, summary)));
+    }
+
+    Ok(None)
 }
 
 #[cfg(test)]
@@ -314,5 +447,114 @@ mod tests {
 
         let found = find_task_spec_file(temp.path(), "TASK-001").unwrap();
         assert_eq!(found, task_path);
+    }
+
+    #[test]
+    fn test_read_full_roadmap() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let status_dir = temp.path().join(".claude/status");
+        std::fs::create_dir_all(&status_dir).unwrap();
+
+        let roadmap_content = "# Project Roadmap\n\nLine 1\nLine 2\nLine 3\n...many more lines...\nLine 25";
+        let roadmap_file = status_dir.join("ROADMAP.md");
+        std::fs::write(&roadmap_file, roadmap_content).unwrap();
+
+        let result = read_full_roadmap(temp.path()).unwrap();
+        // 应该读取完整内容，包含所有行（不只是前 20 行）
+        assert!(result.contains("Line 25"));
+        assert_eq!(result, roadmap_content);
+    }
+
+    #[test]
+    fn test_read_phase_plan() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let phase_dir = temp.path().join(".claude/phases/phase-2_implementation");
+        std::fs::create_dir_all(&phase_dir).unwrap();
+
+        let plan_content = "# Phase 2 Plan\n\n## Summary\nThis is phase 2";
+        let plan_file = phase_dir.join("PHASE_PLAN.md");
+        std::fs::write(&plan_file, plan_content).unwrap();
+
+        // 查找 phase 2 的 plan
+        let result = read_phase_plan(temp.path(), 2).unwrap();
+        assert!(result.is_some());
+        assert_eq!(result.unwrap(), plan_content);
+
+        // 查找不存在的 phase 3
+        let result_none = read_phase_plan(temp.path(), 3).unwrap();
+        assert!(result_none.is_none());
+    }
+
+    #[test]
+    fn test_get_current_phase_number() {
+        use crate::state::Memory;
+        use crate::state::models::Progress;
+
+        let temp = tempfile::TempDir::new().unwrap();
+        let status_dir = temp.path().join(".claude/status");
+        std::fs::create_dir_all(&status_dir).unwrap();
+
+        // 测试格式 "1"
+        let memory = Memory {
+            progress: Progress {
+                current_phase: Some("1".to_string()),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let memory_file = status_dir.join("memory.json");
+        std::fs::write(&memory_file, serde_json::to_string_pretty(&memory).unwrap()).unwrap();
+
+        let result = get_current_phase_number(temp.path()).unwrap();
+        assert_eq!(result, 1);
+
+        // 测试格式 "Phase 2"
+        let memory2 = Memory {
+            progress: Progress {
+                current_phase: Some("Phase 2".to_string()),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        std::fs::write(&memory_file, serde_json::to_string_pretty(&memory2).unwrap()).unwrap();
+
+        let result2 = get_current_phase_number(temp.path()).unwrap();
+        assert_eq!(result2, 2);
+
+        // 测试格式 "phase-3"
+        let memory3 = Memory {
+            progress: Progress {
+                current_phase: Some("phase-3".to_string()),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        std::fs::write(&memory_file, serde_json::to_string_pretty(&memory3).unwrap()).unwrap();
+
+        let result3 = get_current_phase_number(temp.path()).unwrap();
+        assert_eq!(result3, 3);
+    }
+
+    #[test]
+    fn test_extract_summary() {
+        // 测试包含 ## Summary section 的情况
+        let content_with_summary = r#"# Plan
+
+## Summary
+This is a summary
+of the plan
+
+## Details
+Some details here"#;
+
+        let summary = extract_summary(content_with_summary);
+        assert!(summary.contains("This is a summary"));
+        assert!(summary.contains("of the plan"));
+        assert!(!summary.contains("## Details"));
+
+        // 测试没有 Summary section 的情况（返回前 30 行）
+        let content_no_summary = "Line 1\nLine 2\nLine 3\n";
+        let summary2 = extract_summary(content_no_summary);
+        assert_eq!(summary2, content_no_summary.trim_end());
     }
 }
