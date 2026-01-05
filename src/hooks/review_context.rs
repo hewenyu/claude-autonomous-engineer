@@ -193,12 +193,7 @@ VERDICT: PASS | FAIL | WARN
 ISSUES:
 - [Severity: ERROR|WARN] Description
 "#,
-            task_spec,
-            diff,
-            api_contract,
-            roadmap_full,
-            phase_plan,
-            prev_phase_summary,
+            task_spec, diff, api_contract, roadmap_full, phase_plan, prev_phase_summary,
         );
 
         Ok(ReviewContext {
@@ -327,8 +322,8 @@ fn read_full_roadmap(project_root: &Path) -> Result<String> {
 
 /// 从 memory.json 中获取当前 phase 编号
 fn get_current_phase_number(project_root: &Path) -> Result<u32> {
-    use crate::utils::read_json;
     use crate::state::Memory;
+    use crate::utils::read_json;
 
     let memory_file = project_root.join(".claude/status/memory.json");
     let memory: Memory = read_json(&memory_file).unwrap_or_default();
@@ -336,9 +331,7 @@ fn get_current_phase_number(project_root: &Path) -> Result<u32> {
     // 从 memory.progress.current_phase 解析编号
     if let Some(phase_str) = memory.progress.current_phase {
         // 可能的格式: "1", "Phase 1", "phase-1" 等
-        let num_str: String = phase_str.chars()
-            .filter(|c| c.is_ascii_digit())
-            .collect();
+        let num_str: String = phase_str.chars().filter(|c| c.is_ascii_digit()).collect();
 
         if let Ok(num) = num_str.parse::<u32>() {
             return Ok(num);
@@ -366,10 +359,7 @@ fn read_phase_plan(project_root: &Path, phase_number: u32) -> Result<Option<Stri
             continue;
         }
 
-        let dir_name = path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("");
+        let dir_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
 
         // 匹配 phase-N_ 格式
         if dir_name.starts_with(&format!("phase-{}_", phase_number)) {
@@ -455,7 +445,8 @@ mod tests {
         let status_dir = temp.path().join(".claude/status");
         std::fs::create_dir_all(&status_dir).unwrap();
 
-        let roadmap_content = "# Project Roadmap\n\nLine 1\nLine 2\nLine 3\n...many more lines...\nLine 25";
+        let roadmap_content =
+            "# Project Roadmap\n\nLine 1\nLine 2\nLine 3\n...many more lines...\nLine 25";
         let roadmap_file = status_dir.join("ROADMAP.md");
         std::fs::write(&roadmap_file, roadmap_content).unwrap();
 
@@ -487,8 +478,8 @@ mod tests {
 
     #[test]
     fn test_get_current_phase_number() {
-        use crate::state::Memory;
         use crate::state::models::Progress;
+        use crate::state::Memory;
 
         let temp = tempfile::TempDir::new().unwrap();
         let status_dir = temp.path().join(".claude/status");
@@ -516,7 +507,11 @@ mod tests {
             },
             ..Default::default()
         };
-        std::fs::write(&memory_file, serde_json::to_string_pretty(&memory2).unwrap()).unwrap();
+        std::fs::write(
+            &memory_file,
+            serde_json::to_string_pretty(&memory2).unwrap(),
+        )
+        .unwrap();
 
         let result2 = get_current_phase_number(temp.path()).unwrap();
         assert_eq!(result2, 2);
@@ -529,7 +524,11 @@ mod tests {
             },
             ..Default::default()
         };
-        std::fs::write(&memory_file, serde_json::to_string_pretty(&memory3).unwrap()).unwrap();
+        std::fs::write(
+            &memory_file,
+            serde_json::to_string_pretty(&memory3).unwrap(),
+        )
+        .unwrap();
 
         let result3 = get_current_phase_number(temp.path()).unwrap();
         assert_eq!(result3, 3);
