@@ -35,7 +35,7 @@ enum Commands {
 
     /// 运行 hook（由 Claude Code 调用）
     Hook {
-        /// Hook 名称: inject_state, codex_review_gate, progress_sync, error_tracker, loop_driver
+        /// Hook 名称: inject_state, progress_sync, repo_map_sync, codex_review_gate, error_tracker, loop_driver
         name: String,
     },
 

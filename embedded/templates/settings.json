@@ -47,6 +47,11 @@
             "type": "command",
             "command": "claude-autonomous hook progress_sync",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "claude-autonomous hook repo_map_sync",
+            "timeout": 60
           }
         ]
       }

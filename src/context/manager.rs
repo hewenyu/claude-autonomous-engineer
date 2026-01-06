@@ -667,25 +667,9 @@ impl ContextManager {
 
     /// 获取完整上下文（用于 UserPromptSubmit）
     pub fn get_full_context(&self) -> Result<String> {
-        let parts = [
-            self.get_system_header(ContextMode::Autonomous),
-            self.get_memory_context()?,
-            self.get_state_machine_context()?, // State Machine
-            self.get_stories_context()?,       // User Stories（新增）
-            self.get_roadmap_context(false)?,
-            self.get_current_task_spec()?,
-            self.get_repo_map_context()?, // Repository Map
-            self.get_error_context(None)?,
-            self.get_contract_context()?,
-            self.get_git_context(10)?,
-            self.get_decisions_context(20)?,
-        ];
-
-        let mut ctx = parts.join("");
-
-        // 添加行动指令
-        ctx.push_str(
-            r#"
+        // Keep repository map available for planning (ROADMAP generation) by avoiding
+        // whole-context middle truncation which can drop mid sections.
+        let mandatory_actions = r#"
 ═══════════════════════════════════════════════════════════════════════════════
 📌 MANDATORY ACTIONS:
 1. Read the CURRENT STATE above carefully
@@ -695,10 +679,48 @@ impl ContextManager {
 5. Update memory.json IMMEDIATELY after any progress
 6. Continue loop - DO NOT STOP until all tasks are [x] marked
 ═══════════════════════════════════════════════════════════════════════════════
-"#,
-        );
+"#
+        .to_string();
 
-        Ok(truncate_middle(&ctx, BUDGET_FULL))
+        // Reserve space for mandatory actions footer (always include it).
+        let mut remaining = BUDGET_FULL.saturating_sub(mandatory_actions.len());
+
+        // Ordered by importance for autonomous loop + planning.
+        // NOTE: repo_map is intentionally placed early so it survives budget constraints.
+        let parts = [
+            self.get_system_header(ContextMode::Autonomous),
+            self.get_memory_context()?,
+            self.get_roadmap_context(false)?,
+            self.get_current_task_spec()?,
+            self.get_repo_map_context()?, // Repository Map (code index for ROADMAP)
+            self.get_contract_context()?,
+            self.get_error_context(None)?,
+            self.get_state_machine_context()?, // State Machine
+            self.get_stories_context()?,       // User Stories
+            self.get_git_context(10)?,
+            self.get_decisions_context(20)?,
+        ];
+
+        let mut ctx = String::new();
+        for part in parts {
+            if remaining == 0 {
+                break;
+            }
+            if part.is_empty() {
+                continue;
+            }
+
+            if part.len() <= remaining {
+                ctx.push_str(&part);
+                remaining -= part.len();
+            } else {
+                ctx.push_str(&truncate_middle(&part, remaining));
+                break;
+            }
+        }
+
+        ctx.push_str(&mandatory_actions);
+        Ok(ctx)
     }
 
     /// 获取代码审查上下文

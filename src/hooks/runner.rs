@@ -7,7 +7,7 @@ use std::path::Path;
 
 use super::{
     run_claude_protocol_hook, run_codex_review_gate_hook, run_error_tracker_hook,
-    run_inject_state_hook, run_loop_driver_hook, run_progress_sync_hook,
+    run_inject_state_hook, run_loop_driver_hook, run_progress_sync_hook, run_repo_map_sync_hook,
 };
 
 /// 运行指定的 hook
@@ -24,6 +24,11 @@ pub fn run_hook(hook_name: &str, project_root: &Path, input: Option<&Value>) -> 
         "progress_sync" | "post_write_update" => {
             let input_data = input.unwrap_or(&default_input);
             run_progress_sync_hook(project_root, input_data)
+        }
+
+        "repo_map_sync" => {
+            let input_data = input.unwrap_or(&default_input);
+            run_repo_map_sync_hook(project_root, input_data)
         }
 
         "codex_review_gate" | "pre_write_check" => {

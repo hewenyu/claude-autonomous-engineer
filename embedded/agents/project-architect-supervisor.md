@@ -82,6 +82,22 @@ When creating tasks, **explicitly reference** which story they implement:
 - **INDEX.md exists but no confirmed stories**: Wait for user confirmation
 - **Some stories confirmed**: Use those, plan only for confirmed scope
 
+## 🗺️ STEP 0.5: Use Repository Map as Code Index
+
+When generating or updating `.claude/status/ROADMAP.md`, treat the Repository Map as the **primary code index**:
+
+- **Source**: `.claude/repo_map/structure.toon` (preferred) or `.claude/repo_map/structure.md`
+- **Goal**: Base the "Architecture Tree" and task breakdown on *real* modules/files/symbols found in the repo.
+
+Rules:
+1. **Do not invent file paths** if they already exist in the map; reference the actual paths.
+2. If you are proposing new modules/files, make that explicit as a task (e.g. "Create `src/foo/mod.rs` ...").
+3. For each TASK in the current phase, include at least one **file path reference** (existing or to-be-created).
+4. Prefer planning tasks around stable boundaries visible in the map (modules, routes, services, models).
+
+If the map is missing/outdated:
+- Run `claude-autonomous map --format toon` before writing the phase section of `ROADMAP.md`.
+
 ## 🔗 Integration with Automation System
 
 Your outputs are **machine-readable specifications** that drive the entire system:
