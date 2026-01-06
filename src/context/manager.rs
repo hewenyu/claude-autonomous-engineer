@@ -441,20 +441,22 @@ impl ContextManager {
         }
 
         let Some((repo_map_file, label)) = selected else {
-            // 未生成则只给极短提示，避免每次注入都浪费 token
-            return Ok("\n## 🗺️ REPOSITORY MAP\n\n*Not generated. Run `claude-autonomous map` (recommended: default TOON).* \n".to_string());
+            // Map 往往很大；默认只注入“指针”，避免占用上下文预算。
+            return Ok(
+                "\n完整的代码索引未生成；请运行 `claude-autonomous map --format toon`。\n"
+                    .to_string(),
+            );
         };
 
-        let content = match try_read_file(&repo_map_file) {
-            Some(c) => c,
-            None => return Ok(String::new()),
-        };
-
-        // Repository Map 通常较大，限制在 15K tokens 左右
+        // Map 往往很大；默认只注入“指针”，让模型按需读取文件。
+        // 使用相对路径（更适合在 ROADMAP/TASK 中引用）。
+        let rel = repo_map_file
+            .strip_prefix(&self.project_root)
+            .unwrap_or(repo_map_file.as_path());
+        let _ = label;
         Ok(format!(
-            "\n## 🗺️ REPOSITORY MAP (Code Skeleton - {})\n```text\n{}\n```\n",
-            label,
-            truncate_middle(&content, 15000)
+            "\n完整的代码索引请阅读 `{}`。\n",
+            rel.to_string_lossy()
         ))
     }
 

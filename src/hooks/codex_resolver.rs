@@ -211,7 +211,12 @@ fn search_nvm_directories() -> Option<PathBuf> {
 ///
 /// 返回找到的第一个有效 codex 路径，如果没找到返回 None
 fn search_project_local() -> Option<PathBuf> {
-    let mut current = env::current_dir().ok()?;
+    let current = env::current_dir().ok()?;
+    search_project_local_from(&current)
+}
+
+fn search_project_local_from(start_dir: &Path) -> Option<PathBuf> {
+    let mut current = start_dir.to_path_buf();
 
     // 向上查找最多 5 层
     for _ in 0..5 {
@@ -356,8 +361,6 @@ mod tests {
     fn test_search_project_local() {
         let _guard = TEST_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap();
 
-        let original_dir = env::current_dir().unwrap();
-
         let temp = TempDir::new().unwrap();
         let node_modules = temp.path().join("node_modules/.bin");
         fs::create_dir_all(&node_modules).unwrap();
@@ -365,13 +368,7 @@ mod tests {
         let codex_path = node_modules.join("codex");
         create_mock_codex(&codex_path).unwrap();
 
-        // 切换到临时目录
-        env::set_current_dir(temp.path()).unwrap();
-
-        let result = search_project_local();
-
-        // 恢复原目录
-        env::set_current_dir(&original_dir).unwrap();
+        let result = search_project_local_from(temp.path());
 
         assert!(result.is_some());
         assert_eq!(result.unwrap(), codex_path);

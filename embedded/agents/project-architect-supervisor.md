@@ -94,6 +94,7 @@ Rules:
 2. If you are proposing new modules/files, make that explicit as a task (e.g. "Create `src/foo/mod.rs` ...").
 3. For each TASK in the current phase, include at least one **file path reference** (existing or to-be-created).
 4. Prefer planning tasks around stable boundaries visible in the map (modules, routes, services, models).
+5. **Do not paste the full map** into ROADMAP; only reference it by path.
 
 If the map is missing/outdated:
 - Run `claude-autonomous map --format toon` before writing the phase section of `ROADMAP.md`.
