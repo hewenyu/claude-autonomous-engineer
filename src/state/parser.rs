@@ -366,9 +366,9 @@ pub fn parse_story_index(content: &str) -> Result<StoryIndexData> {
             };
 
             match status_marker {
-                " " => draft.push(item),        // [ ] Draft
-                "~" => reviewing.push(item),    // [~] Reviewing
-                "✓" => confirmed.push(item),    // [✓] Confirmed
+                " " => draft.push(item),          // [ ] Draft
+                "~" => reviewing.push(item),      // [~] Reviewing
+                "✓" => confirmed.push(item),      // [✓] Confirmed
                 "x" | "X" => archived.push(item), // [x] Archived
                 _ => {}
             }

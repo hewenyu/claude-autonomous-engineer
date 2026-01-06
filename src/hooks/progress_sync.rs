@@ -7,7 +7,9 @@ use chrono::Utc;
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 
-use crate::state::{sync_from_phase_plan, sync_from_roadmap, sync_from_task_file};
+use crate::state::{
+    sync_from_phase_plan, sync_from_roadmap, sync_from_story_index, sync_from_task_file,
+};
 use crate::utils::{read_json, write_json};
 use crate::Memory;
 
@@ -35,6 +37,10 @@ pub fn run_progress_sync_hook(project_root: &Path, input: &Value) -> Result<Valu
     if filename == "ROADMAP.md" || file_path.to_string_lossy().contains("ROADMAP.md") {
         synced = sync_from_roadmap(project_root, &file_path).unwrap_or(false);
         sync_type = Some("roadmap");
+    } else if filename == "INDEX.md" && file_path.to_string_lossy().contains(".claude/stories") {
+        // Story INDEX.md 同步（新增）
+        synced = sync_from_story_index(project_root, &file_path).unwrap_or(false);
+        sync_type = Some("story_index");
     } else if filename.contains("TASK-") && filename.ends_with(".md") {
         synced = sync_from_task_file(project_root, &file_path).unwrap_or(false);
         sync_type = Some("task");

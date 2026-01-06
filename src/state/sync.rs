@@ -294,6 +294,92 @@ pub fn sync_from_phase_plan(project_root: &Path, phase_path: &Path) -> Result<bo
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// 从 Story INDEX.md 同步（新增）
+// ═══════════════════════════════════════════════════════════════════
+
+/// 从 Story INDEX.md 同步确认状态到 memory.json
+///
+/// 当用户修改 INDEX.md 中的 story 状态时，同步确认进度信息
+pub fn sync_from_story_index(project_root: &Path, index_path: &Path) -> Result<bool> {
+    // 读取 INDEX.md 内容
+    let content = match try_read_file(index_path) {
+        Some(c) => c,
+        None => return Ok(false),
+    };
+
+    // 解析 Story 索引
+    let story_data = parse_story_index(&content)?;
+
+    // 如果没有任何 story，跳过
+    if story_data.total == 0 {
+        return Ok(false);
+    }
+
+    // 读取 memory.json
+    let memory_path = project_root.join(".claude/status/memory.json");
+    let mut memory: Memory = read_json(&memory_path).unwrap_or_default();
+
+    // 更新 story 相关的进度信息（存储在 extra 字段中）
+    memory.extra.insert(
+        "stories_total".to_string(),
+        serde_json::json!(story_data.total),
+    );
+    memory.extra.insert(
+        "stories_confirmed".to_string(),
+        serde_json::json!(story_data.confirmed.len()),
+    );
+    memory.extra.insert(
+        "stories_draft".to_string(),
+        serde_json::json!(story_data.draft.len()),
+    );
+    memory.extra.insert(
+        "stories_reviewing".to_string(),
+        serde_json::json!(story_data.reviewing.len()),
+    );
+    memory.extra.insert(
+        "stories_archived".to_string(),
+        serde_json::json!(story_data.archived.len()),
+    );
+    memory.extra.insert(
+        "stories_all_confirmed".to_string(),
+        serde_json::json!(!story_data.has_unconfirmed()),
+    );
+    memory.extra.insert(
+        "stories_confirmation_progress".to_string(),
+        serde_json::json!(story_data.confirmation_progress()),
+    );
+    memory.extra.insert(
+        "stories_last_synced".to_string(),
+        serde_json::json!(Utc::now().to_rfc3339()),
+    );
+
+    // 写回 memory.json
+    write_json(&memory_path, &memory)?;
+
+    // 记录决策日志
+    let progress_pct = story_data.confirmation_progress();
+    log_decision(
+        project_root,
+        &format!(
+            "SYNC: Story confirmation progress: {}/{} ({:.1}%)",
+            story_data.confirmed.len(),
+            story_data.total,
+            progress_pct
+        ),
+    )?;
+
+    // 如果所有 stories 都已确认，记录特殊日志
+    if !story_data.has_unconfirmed() {
+        log_decision(
+            project_root,
+            "SYNC: ✓ All stories confirmed! Ready for technical planning.",
+        )?;
+    }
+
+    Ok(true)
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // 测试
 // ═══════════════════════════════════════════════════════════════════
 

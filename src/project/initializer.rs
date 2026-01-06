@@ -67,7 +67,7 @@ fn create_directory_structure(project_root: &Path) -> Result<()> {
         ".claude/agents",
         ".claude/status",
         ".claude/phases",
-        ".claude/stories",  // 新增：stories 目录
+        ".claude/stories", // 新增：stories 目录
     ];
 
     for dir in dirs {

@@ -250,7 +250,7 @@ fn check_story_confirmation(project_root: &Path) -> Result<StoryStatus> {
                 confirmed_count: 0,
                 archived_count: 0,
                 confirmation_progress: 100.0,
-            })
+            });
         }
     };
 

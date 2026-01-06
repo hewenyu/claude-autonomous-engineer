@@ -533,7 +533,9 @@ impl ContextManager {
                     ctx.push_str(&format!("  {} {}: {}\n", status_marker, id, title));
                 }
             }
-            ctx.push_str("\n**Action**: User must review and confirm stories in .claude/stories/INDEX.md\n");
+            ctx.push_str(
+                "\n**Action**: User must review and confirm stories in .claude/stories/INDEX.md\n",
+            );
         }
 
         Ok(ctx)
