@@ -275,3 +275,46 @@ pub struct ReviewRetryState {
     #[serde(default)]
     pub failure_reasons: Vec<String>,
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// Story 相关数据结构（新增）
+// ═══════════════════════════════════════════════════════════════════
+
+/// Story 索引数据 - 从 INDEX.md 解析
+#[derive(Debug, Clone)]
+pub struct StoryIndexData {
+    pub draft: Vec<StoryItem>,
+    pub reviewing: Vec<StoryItem>,
+    pub confirmed: Vec<StoryItem>,
+    pub archived: Vec<StoryItem>,
+    pub total: usize,
+}
+
+impl StoryIndexData {
+    /// 检查是否有已确认的stories
+    pub fn has_confirmed(&self) -> bool {
+        !self.confirmed.is_empty()
+    }
+
+    /// 检查是否还有未确认的stories（draft或reviewing）
+    pub fn has_unconfirmed(&self) -> bool {
+        !self.draft.is_empty() || !self.reviewing.is_empty()
+    }
+
+    /// 获取确认进度百分比
+    pub fn confirmation_progress(&self) -> f64 {
+        if self.total == 0 {
+            return 0.0;
+        }
+        (self.confirmed.len() as f64 / self.total as f64) * 100.0
+    }
+}
+
+/// Story 项
+#[derive(Debug, Clone)]
+pub struct StoryItem {
+    pub line: String,
+    pub id: Option<String>,
+    pub title: Option<String>,
+    pub priority: Option<String>,
+}

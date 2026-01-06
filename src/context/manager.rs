@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use crate::context::truncate::truncate_middle;
-use crate::state::{parse_roadmap, Memory};
+use crate::state::{parse_roadmap, parse_story_index, Memory};
 use crate::state_machine::{GitStateMachine, WorkflowEngine};
 use crate::utils::{get_git_log, read_json, try_read_file};
 
@@ -459,6 +459,87 @@ impl ContextManager {
     }
 
     // ═══════════════════════════════════════════════════════════════════
+    // Layer 4.6: User Stories（业务场景）
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// 获取 Stories 上下文
+    pub fn get_stories_context(&self) -> Result<String> {
+        let index_file = self.project_root.join(".claude/stories/INDEX.md");
+
+        // 如果 INDEX.md 不存在，返回空或简短提示
+        let content = match try_read_file(&index_file) {
+            Some(c) => c,
+            None => return Ok(String::new()), // 没有stories目录则跳过
+        };
+
+        let data = match parse_story_index(&content) {
+            Ok(d) => d,
+            Err(_) => return Ok(String::new()), // 解析失败则跳过
+        };
+
+        // 如果没有任何story，跳过
+        if data.total == 0 {
+            return Ok(String::new());
+        }
+
+        let mut ctx = String::from("\n## 📖 USER STORIES STATUS\n\n");
+
+        // 确认进度
+        let progress_pct = data.confirmation_progress();
+        ctx.push_str(&format!(
+            r#"**Confirmation Progress**: {}/{} ({:.1}%)
+
+┌────────────────────────────────────────────────────────────────────┐
+│  Story Status Summary                                              │
+├────────────────────────────────────────────────────────────────────┤
+│  [ ] Draft:      {}  ← Waiting for user review                     │
+│  [~] Reviewing:  {}  ← Under user review                           │
+│  [✓] Confirmed:  {}  ← Ready for technical planning                │
+│  [x] Archived:   {}  ← Not needed                                  │
+└────────────────────────────────────────────────────────────────────┘
+"#,
+            data.confirmed.len(),
+            data.total,
+            progress_pct,
+            data.draft.len(),
+            data.reviewing.len(),
+            data.confirmed.len(),
+            data.archived.len()
+        ));
+
+        // 显示已确认的stories（这些可以用于技术规划）
+        if !data.confirmed.is_empty() {
+            ctx.push_str("\n**Confirmed Stories** (can be used for planning):\n");
+            for item in data.confirmed.iter().take(10) {
+                if let Some(id) = &item.id {
+                    let title = item.title.as_deref().unwrap_or("Untitled");
+                    let priority = item.priority.as_deref().unwrap_or("Unknown");
+                    ctx.push_str(&format!("  ✓ {} [{}]: {}\n", id, priority, title));
+                }
+            }
+        }
+
+        // 显示未确认的stories（需要用户确认）
+        if data.has_unconfirmed() {
+            ctx.push_str("\n**⚠️  Unconfirmed Stories** (need user review):\n");
+            for item in data.draft.iter().chain(data.reviewing.iter()).take(10) {
+                if let Some(id) = &item.id {
+                    let title = item.title.as_deref().unwrap_or("Untitled");
+                    let status_marker = if data.draft.iter().any(|i| i.id == item.id) {
+                        "[ ]"
+                    } else {
+                        "[~]"
+                    };
+                    ctx.push_str(&format!("  {} {}: {}\n", status_marker, id, title));
+                }
+            }
+            ctx.push_str("\n**Action**: User must review and confirm stories in .claude/stories/INDEX.md\n");
+        }
+
+        Ok(ctx)
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
     // Layer 5-8: 其他上下文
     // ═══════════════════════════════════════════════════════════════════
 
@@ -587,7 +668,8 @@ impl ContextManager {
         let parts = [
             self.get_system_header(ContextMode::Autonomous),
             self.get_memory_context()?,
-            self.get_state_machine_context()?, // 新增：State Machine
+            self.get_state_machine_context()?, // State Machine
+            self.get_stories_context()?,       // User Stories（新增）
             self.get_roadmap_context(false)?,
             self.get_current_task_spec()?,
             self.get_repo_map_context()?, // Repository Map

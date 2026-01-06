@@ -6,7 +6,7 @@ use anyhow::Result;
 use lazy_static::lazy_static;
 use regex::Regex;
 
-use super::{PhasePlan, RoadmapData, TaskDetail, TaskItem};
+use super::{PhasePlan, RoadmapData, StoryIndexData, StoryItem, TaskDetail, TaskItem};
 
 // ═══════════════════════════════════════════════════════════════════
 // 正则表达式定义
@@ -324,5 +324,95 @@ mod tests {
         assert_eq!(phase.phase_num, "1");
         assert_eq!(phase.phase_name, "Foundation");
         assert_eq!(phase.status, "In Progress");
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Story 索引解析（新增）
+// ═══════════════════════════════════════════════════════════════════
+
+lazy_static! {
+    // Story 状态正则 - 匹配INDEX.md中的表格行
+    // | [STORY-001](STORY-001_xxx.md) | [ ] | High | Title | High |
+    static ref STORY_ROW: Regex = Regex::new(
+        r"^\|\s*\[(STORY-\d+)\]\([^)]+\)\s*\|\s*\[(.)\]\s*\|\s*(\w+)\s*\|\s*([^|]+)\s*\|"
+    ).unwrap();
+}
+
+/// 解析 Story 索引文件（INDEX.md）
+///
+/// 从表格中提取所有 stories 的状态
+pub fn parse_story_index(content: &str) -> Result<StoryIndexData> {
+    let mut draft = Vec::new();
+    let mut reviewing = Vec::new();
+    let mut confirmed = Vec::new();
+    let mut archived = Vec::new();
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+
+        // 匹配story表格行
+        if let Some(caps) = STORY_ROW.captures(trimmed) {
+            let id = caps.get(1).map(|m| m.as_str().to_string());
+            let status_marker = caps.get(2).map(|m| m.as_str()).unwrap_or("");
+            let priority = caps.get(3).map(|m| m.as_str().trim().to_string());
+            let title = caps.get(4).map(|m| m.as_str().trim().to_string());
+
+            let item = StoryItem {
+                line: line.to_string(),
+                id,
+                title,
+                priority,
+            };
+
+            match status_marker {
+                " " => draft.push(item),        // [ ] Draft
+                "~" => reviewing.push(item),    // [~] Reviewing
+                "✓" => confirmed.push(item),    // [✓] Confirmed
+                "x" | "X" => archived.push(item), // [x] Archived
+                _ => {}
+            }
+        }
+    }
+
+    let total = draft.len() + reviewing.len() + confirmed.len() + archived.len();
+
+    Ok(StoryIndexData {
+        draft,
+        reviewing,
+        confirmed,
+        archived,
+        total,
+    })
+}
+
+#[cfg(test)]
+mod story_tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_story_index() {
+        let content = r#"
+# User Stories Index
+
+## Stories List
+
+| ID | Status | Priority | Title | Business Value |
+|----|--------|----------|-------|----------------|
+| [STORY-001](STORY-001_login.md) | [ ] | High | User Login | High |
+| [STORY-002](STORY-002_register.md) | [~] | High | User Register | High |
+| [STORY-003](STORY-003_reset.md) | [✓] | Medium | Password Reset | Medium |
+| [STORY-004](STORY-004_old.md) | [x] | Low | Old Feature | Low |
+"#;
+
+        let data = parse_story_index(content).unwrap();
+        assert_eq!(data.draft.len(), 1);
+        assert_eq!(data.reviewing.len(), 1);
+        assert_eq!(data.confirmed.len(), 1);
+        assert_eq!(data.archived.len(), 1);
+        assert_eq!(data.total, 4);
+        assert!(data.has_confirmed());
+        assert!(data.has_unconfirmed());
+        assert_eq!(data.confirmation_progress(), 25.0);
     }
 }

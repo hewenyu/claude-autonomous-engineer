@@ -7,7 +7,7 @@ use chrono::{DateTime, Duration, Utc};
 use serde_json::{json, Value};
 use std::path::Path;
 
-use crate::state::{parse_roadmap, Memory};
+use crate::state::{parse_roadmap, parse_story_index, Memory};
 use crate::state_machine::{GitStateMachine, StateId};
 use crate::utils::{read_json, try_read_file, write_json};
 
@@ -21,9 +21,52 @@ const TEST_FAILURE_WINDOW: usize = 12;
 
 /// 运行 loop_driver hook
 ///
-/// 检查 ROADMAP 完成状态，决定是否继续循环
+/// 检查 Story 确认状态 → ROADMAP 完成状态，决定是否继续循环
 /// 同时执行自动状态转换
 pub fn run_loop_driver_hook(project_root: &Path) -> Result<Value> {
+    // Step 0: 检查 Story 确认状态（新增）
+    let story_status = check_story_confirmation(project_root)?;
+
+    // 如果有未确认的stories，阻止继续
+    if story_status.has_stories && !story_status.all_confirmed {
+        return Ok(json!({
+            "decision": "block",
+            "reason": format!(r#"📖 STORIES NOT CONFIRMED
+
+There are {} unconfirmed user stories that need your review.
+
+Progress: {}/{} Confirmed ({:.1}%)
+├── Draft: {}
+├── Reviewing: {}
+├── Confirmed: {}
+└── Archived: {}
+
+┌──────────────────────────────────────────────────────────────────┐
+│  ⚠️ Action Required: Review and Confirm Stories                  │
+├──────────────────────────────────────────────────────────────────┤
+│  1. Open .claude/stories/INDEX.md                                 │
+│  2. Click each story link to read details                         │
+│  3. Confirm business understanding is correct                     │
+│  4. Mark confirmed stories with [✓] in INDEX.md                   │
+│                                                                   │
+│  When all necessary stories are marked [✓], tell me:             │
+│  "Stories已确认，开始技术规划"                                     │
+└──────────────────────────────────────────────────────────────────┘
+
+⏸️  Cannot proceed with technical planning until stories are confirmed.
+"#,
+                story_status.total - story_status.confirmed_count,
+                story_status.confirmed_count,
+                story_status.total,
+                story_status.confirmation_progress,
+                story_status.draft_count,
+                story_status.reviewing_count,
+                story_status.confirmed_count,
+                story_status.archived_count
+            )
+        }));
+    }
+
     let roadmap = check_roadmap(project_root)?;
     let stuck = check_stuck(project_root)?;
 
@@ -159,6 +202,18 @@ Continue the loop. DO NOT STOP.
 // ═══════════════════════════════════════════════════════════════════
 
 #[derive(Debug)]
+struct StoryStatus {
+    has_stories: bool,
+    all_confirmed: bool,
+    total: usize,
+    draft_count: usize,
+    reviewing_count: usize,
+    confirmed_count: usize,
+    archived_count: usize,
+    confirmation_progress: f64,
+}
+
+#[derive(Debug)]
 struct RoadmapStatus {
     exists: bool,
     complete: bool,
@@ -176,6 +231,41 @@ struct StuckStatus {
     stuck: bool,
     reason: String,
     suggestion: String,
+}
+
+/// 检查 Story 确认状态
+fn check_story_confirmation(project_root: &Path) -> Result<StoryStatus> {
+    let index_file = project_root.join(".claude/stories/INDEX.md");
+
+    // 如果INDEX.md不存在，认为没有stories（跳过检查）
+    let content = match try_read_file(&index_file) {
+        Some(c) => c,
+        None => {
+            return Ok(StoryStatus {
+                has_stories: false,
+                all_confirmed: true, // 没有stories就当作全部确认
+                total: 0,
+                draft_count: 0,
+                reviewing_count: 0,
+                confirmed_count: 0,
+                archived_count: 0,
+                confirmation_progress: 100.0,
+            })
+        }
+    };
+
+    let data = parse_story_index(&content)?;
+
+    Ok(StoryStatus {
+        has_stories: data.total > 0,
+        all_confirmed: !data.has_unconfirmed(), // 只要没有draft和reviewing就算全部确认
+        total: data.total,
+        draft_count: data.draft.len(),
+        reviewing_count: data.reviewing.len(),
+        confirmed_count: data.confirmed.len(),
+        archived_count: data.archived.len(),
+        confirmation_progress: data.confirmation_progress(),
+    })
 }
 
 /// 检查 ROADMAP 状态

@@ -67,6 +67,7 @@ fn create_directory_structure(project_root: &Path) -> Result<()> {
         ".claude/agents",
         ".claude/status",
         ".claude/phases",
+        ".claude/stories",  // 新增：stories 目录
     ];
 
     for dir in dirs {
@@ -216,6 +217,95 @@ Describe the original user request / PRD here.
     let decisions_path = project_root.join(".claude/status/decisions.log");
     fs::write(&decisions_path, "")?;
     println!("  ✓ {}", ".claude/status/decisions.log".cyan());
+
+    // stories/INDEX.md 模板（新增）
+    let index_template = r#"# 📖 User Stories Index
+
+**项目**: 待定
+**创建时间**: 待定
+**总计Stories**: 0
+
+## 📊 确认状态总览
+
+┌────────────────────────────────────────────────────────────────────┐
+│  Story Confirmation Status                                         │
+├────────────────────────────────────────────────────────────────────┤
+│  [ ] Draft      ● Not yet reviewed                                 │
+│  [~] Reviewing  ● Under user review                                │
+│  [✓] Confirmed  ● Approved - ready for architecture planning       │
+│  [x] Archived   ● No longer needed                                 │
+└────────────────────────────────────────────────────────────────────┘
+
+Progress: 0/0 Confirmed (0%)
+├── Confirmed: 0
+├── Reviewing: 0
+├── Draft: 0
+└── Archived: 0
+
+---
+
+## 🎯 Stories List
+
+### Phase 1: 待规划
+
+*使用 story-generator agent 来创建业务场景*
+
+示例:
+```
+你: "我想要一个用户认证系统"
+Claude: [调用 story-generator] → 生成 STORY-001, STORY-002, STORY-003...
+```
+
+---
+
+## ✅ 如何确认Stories
+
+### 步骤：
+
+1. **生成Stories** - 使用 story-generator agent
+2. **阅读每个Story文件** - 点击上面表格中的链接
+3. **确认业务理解** - 检查场景、验收标准是否符合预期
+4. **修改Story** - 如有问题，直接编辑对应的 STORY-xxx.md 文件
+5. **更新状态** - 在上表中将状态从 `[ ]` 改为 `[✓]`
+
+### 状态标记说明：
+
+```markdown
+# 确认 STORY-001
+| [STORY-001](STORY-001_user_login.md) | [ ] | High | 用户登录功能 | High |
+                                        ↓
+| [STORY-001](STORY-001_user_login.md) | [✓] | High | 用户登录功能 | High |
+```
+
+---
+
+## 🚀 下一步
+
+当所有必要的Stories都标记为 `[✓]` 后：
+
+告诉Claude："Stories已确认，开始技术规划"
+
+系统将自动:
+1. 调用 project-architect-supervisor
+2. 根据确认的Stories生成:
+   - ROADMAP.md (技术任务)
+   - api_contract.yaml (接口契约)
+   - PHASE_PLAN.md (阶段计划)
+
+---
+
+## 📝 状态说明
+
+- **[ ] Draft**: 刚生成，等待用户首次审查
+- **[~] Reviewing**: 用户正在审查中
+- **[✓] Confirmed**: 用户已确认，可用于技术规划
+- **[x] Archived**: 已归档，不会用于后续开发
+
+**⚠️ 重要**: 只有 `[✓] Confirmed` 状态的Stories才会被 project-architect-supervisor 使用！
+"#;
+    let index_path = project_root.join(".claude/stories/INDEX.md");
+    fs::write(&index_path, index_template)?;
+    println!("  ✓ {}", ".claude/stories/INDEX.md".cyan());
 
     Ok(())
 }

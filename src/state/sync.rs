@@ -6,7 +6,7 @@ use anyhow::Result;
 use chrono::Utc;
 use std::path::Path;
 
-use super::{parse_phase_plan, parse_roadmap, parse_task_file, Memory};
+use super::{parse_phase_plan, parse_roadmap, parse_story_index, parse_task_file, Memory};
 use crate::utils::{append_file, read_json, try_read_file, write_json};
 
 // ═══════════════════════════════════════════════════════════════════
