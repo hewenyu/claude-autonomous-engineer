@@ -1,123 +1,51 @@
+//! Claude Autonomous Engineering TUI
+//!
+//! 基于 Ratatui 的多智能体会话管理系统
+//!
+//! 用法:
+//! - `claude-autonomous` - 启动 TUI 界面
+//! - `claude-autonomous hook <name>` - 运行 hook（供 Claude Code 调用）
+//! - `claude-autonomous --shell` - 启动 shell 测试模式
+
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use colored::*;
+use crossterm::event::{KeyCode, KeyModifiers};
 use std::env;
+use std::time::Duration;
 
-use claude_autonomous::{find_project_root, project::init_project, templates::AgentAssets};
+use claude_autonomous::tui::{
+    init_terminal, install_panic_hook, restore_terminal, App, AppMode, Event, EventHandler,
+};
 
-/// Claude Autonomous Engineering CLI
+/// Claude Autonomous Engineering TUI
 ///
-/// 纯 Rust 实现的自主工程工具 - 零 Python 依赖
+/// 基于 Ratatui 的多智能体会话管理系统
 #[derive(Parser)]
 #[command(name = "claude-autonomous")]
-#[command(author, version = env!("APP_VERSION"), about)]
-#[command(
-    long_about = "A pure Rust implementation of Claude Autonomous Engineering toolkit.\n\
-                        All agents and hooks are embedded in the binary - no external dependencies required."
-)]
+#[command(author, version, about = "Multi-agent TUI orchestration system")]
 struct Cli {
+    /// 启动 shell 测试模式（而非 Claude）
+    #[arg(long)]
+    shell: bool,
+
     #[command(subcommand)]
-    command: Commands,
+    command: Option<Commands>,
 }
 
 #[derive(Subcommand)]
 enum Commands {
-    /// 初始化项目 - 创建 .claude 目录和嵌入资源
-    Init {
-        /// 项目名称（可选）
-        #[arg(short, long)]
-        name: Option<String>,
-
-        /// 强制覆盖已存在的配置
-        #[arg(short, long)]
-        force: bool,
-    },
-
     /// 运行 hook（由 Claude Code 调用）
     Hook {
         /// Hook 名称: inject_state, progress_sync, repo_map_sync, codex_review_gate, error_tracker, loop_driver
         name: String,
     },
-
-    /// 显示项目根目录
-    Root,
-
-    /// 显示当前状态和进度
-    Status,
-
-    /// 列出所有内嵌的 agents
-    Agents,
-
-    /// 诊断环境和配置
-    Doctor,
-
-    /// 生成 Repository Map（代码库结构骨架）
-    Map {
-        /// 输出文件路径（默认：.claude/repo_map/structure.toon 或 structure.md）
-        #[arg(short, long)]
-        output: Option<String>,
-
-        /// 强制重新生成（忽略缓存）
-        #[arg(short, long)]
-        force: bool,
-
-        /// 输出格式：markdown, toon, toon-grouped（默认：toon）
-        #[arg(long, default_value = "toon")]
-        format: String,
-    },
-
-    /// 状态机管理（Git 驱动的状态快照）
-    #[command(subcommand)]
-    State(StateCommands),
 }
 
-/// 状态机子命令
-#[derive(Subcommand)]
-enum StateCommands {
-    /// 列出所有状态快照
-    List,
-
-    /// 显示当前状态
-    Current,
-
-    /// 回滚到指定 tag
-    Rollback {
-        /// Tag 名称（例如：state-20251231-120000-planning-TASK-001）
-        tag: String,
-    },
-
-    /// 显示状态转换图
-    Graph {
-        /// 仅显示指定任务的转换（可选）
-        #[arg(short, long)]
-        task_id: Option<String>,
-    },
-
-    /// 手动创建状态转换
-    Transition {
-        /// 目标状态（idle, planning, coding, testing, reviewing, completed, blocked）
-        state: String,
-
-        /// 任务 ID（可选）
-        #[arg(short, long)]
-        task_id: Option<String>,
-    },
-
-    /// 显示工作流帮助
-    Help,
-}
-
-// ═══════════════════════════════════════════════════════════════════
-// Hook 执行（纯 Rust 实现）
-// ═══════════════════════════════════════════════════════════════════
-
+/// 运行 hook（保持向后兼容）
 fn run_hook(hook_name: &str) -> Result<()> {
-    let project_root = match find_project_root() {
+    let project_root = match claude_autonomous::find_project_root() {
         Some(root) => root,
-        None => {
-            // 如果没有项目根目录，使用当前目录
-            env::current_dir()?
-        }
+        None => env::current_dir()?,
     };
 
     use claude_autonomous::hooks::{print_hook_output, run_hook_from_stdin};
@@ -128,377 +56,227 @@ fn run_hook(hook_name: &str) -> Result<()> {
     Ok(())
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// 状态显示
-// ═══════════════════════════════════════════════════════════════════
+/// 运行 TUI 主循环
+fn run_tui(use_shell: bool) -> Result<()> {
+    // 安装 panic hook 确保终端恢复
+    install_panic_hook();
 
-fn show_status() -> Result<()> {
-    use claude_autonomous::{state::parse_roadmap, utils::read_json, Memory};
+    // 初始化终端
+    let mut terminal = init_terminal()?;
 
-    let project_root = match find_project_root() {
-        Some(root) => root,
-        None => {
-            println!("{}", "❌ No .claude directory found".red());
-            println!("Run {} to initialize", "claude-autonomous init".cyan());
-            return Ok(());
-        }
+    // 获取终端大小
+    let size = terminal.size()?;
+    let mut app = App::new(size.width, size.height);
+
+    // 启动进程
+    let reader = if use_shell {
+        app.spawn_shell()?
+    } else {
+        app.spawn_claude()?
     };
 
-    println!(
-        "{}",
-        "╔══════════════════════════════════════════════════════════════════╗".cyan()
-    );
-    println!(
-        "{}",
-        "║          Claude Autonomous Engineering Status                     ║".cyan()
-    );
-    println!(
-        "{}",
-        "╚══════════════════════════════════════════════════════════════════╝".cyan()
-    );
-    println!();
-    println!(
-        "📁 Project Root: {}",
-        project_root.display().to_string().green()
-    );
+    // 创建事件处理器
+    let tick_rate = Duration::from_millis(50); // 20fps
+    let events = EventHandler::new(tick_rate);
 
-    // 读取 memory.json
-    let memory_file = project_root.join(".claude/status/memory.json");
-    let memory: Memory = read_json(&memory_file).unwrap_or_default();
+    // 启动 PTY 读取线程
+    events.start_pty_reader(reader);
 
-    println!();
-    println!("🧠 Current State:");
-    println!("   Project: {}", memory.project.yellow());
+    // 主事件循环
+    loop {
+        // 渲染 UI
+        terminal.draw(|frame| {
+            claude_autonomous::tui::ui::render(frame, &app);
+        })?;
 
-    if let Some(task_id) = &memory.current_task.id {
-        println!("   Task: {}", task_id.cyan());
-        println!("   Status: {}", memory.current_task.status.yellow());
-        println!(
-            "   Retries: {}/{}",
-            memory.current_task.retry_count, memory.current_task.max_retries
-        );
+        // 处理事件
+        match events.next() {
+            Ok(event) => match event {
+                Event::Key(key) => {
+                    handle_key_event(&mut app, key)?;
+                }
+                Event::PtyOutput(data) => {
+                    app.process_pty_output(&data);
+                }
+                Event::PtyExit(code) => {
+                    app.status_message = format!(
+                        "Process exited (code: {:?}) | Press any key to quit",
+                        code
+                    );
+                }
+                Event::Resize(w, h) => {
+                    app.resize(w, h)?;
+                }
+                Event::Error(e) => {
+                    app.status_message = format!("Error: {}", e);
+                }
+                Event::Tick | Event::Mouse(_) => {
+                    // 只触发重新渲染
+                }
+            },
+            Err(_) => {
+                // Channel 关闭，退出
+                break;
+            }
+        }
+
+        if app.should_quit {
+            break;
+        }
     }
 
-    // 读取 ROADMAP.md
-    let roadmap_file = project_root.join(".claude/status/ROADMAP.md");
-    if roadmap_file.exists() {
-        use std::fs;
-        let content = fs::read_to_string(&roadmap_file)?;
-        match parse_roadmap(&content) {
-            Ok(data) => {
-                let pct = if data.total > 0 {
-                    ((data.completed.len() + data.skipped.len()) as f64 / data.total as f64) * 100.0
-                } else {
-                    0.0
-                };
+    // 恢复终端
+    restore_terminal()?;
 
-                println!();
-                println!("📋 Progress:");
-                println!("   {} Completed: {}", "✓".green(), data.completed.len());
-                println!(
-                    "   {} In Progress: {}",
-                    "▶".yellow(),
-                    data.in_progress.len()
-                );
-                println!("   {} Pending: {}", "○".white(), data.pending.len());
-                println!("   {} Blocked: {}", "!".red(), data.blocked.len());
-                println!("   {} Skipped: {}", "−".blue(), data.skipped.len());
-                println!("   Total: {} ({:.1}%)", data.total, pct);
+    Ok(())
+}
 
-                if let Some(phase) = &data.current_phase {
-                    println!();
-                    println!("📍 Current Phase: {}", phase.cyan());
+/// 处理键盘事件
+fn handle_key_event(
+    app: &mut App,
+    key: crossterm::event::KeyEvent,
+) -> Result<()> {
+    match app.mode {
+        AppMode::Normal => {
+            match (key.modifiers, key.code) {
+                // Ctrl+Q 退出
+                (KeyModifiers::CONTROL, KeyCode::Char('q')) => {
+                    app.should_quit = true;
+                }
+                // Ctrl+C 退出
+                (KeyModifiers::CONTROL, KeyCode::Char('c')) => {
+                    // 发送 Ctrl+C 到 PTY
+                    app.send_input(&[0x03])?;
+                }
+                // Ctrl+B 进入命令模式
+                (KeyModifiers::CONTROL, KeyCode::Char('b')) => {
+                    app.mode = AppMode::Command;
+                    app.status_message = "Command mode | ESC to exit | Enter to execute".to_string();
+                }
+                // 其他按键发送到 PTY
+                _ => {
+                    let bytes = key_to_bytes(key);
+                    app.send_input(&bytes)?;
                 }
             }
-            Err(e) => {
-                println!();
-                println!("{}", format!("⚠️  Failed to parse ROADMAP: {}", e).yellow());
+        }
+        AppMode::Command => {
+            match key.code {
+                KeyCode::Esc => {
+                    app.mode = AppMode::Normal;
+                    app.input_buffer.clear();
+                    app.status_message =
+                        "Press Ctrl+Q to quit | Ctrl+B for command mode".to_string();
+                }
+                KeyCode::Enter => {
+                    execute_command(app)?;
+                    app.mode = AppMode::Normal;
+                    app.input_buffer.clear();
+                }
+                KeyCode::Char(c) => {
+                    app.input_buffer.push(c);
+                }
+                KeyCode::Backspace => {
+                    app.input_buffer.pop();
+                }
+                _ => {}
             }
         }
-    } else {
-        println!();
-        println!(
-            "{}",
-            "⚠️  ROADMAP.md not found - Run project planning first".yellow()
-        );
+        AppMode::Quitting => {
+            match key.code {
+                KeyCode::Char('y') | KeyCode::Char('Y') => {
+                    app.should_quit = true;
+                }
+                _ => {
+                    app.mode = AppMode::Normal;
+                    app.status_message =
+                        "Press Ctrl+Q to quit | Ctrl+B for command mode".to_string();
+                }
+            }
+        }
     }
-
-    println!();
-    println!(
-        "💡 Tip: Use {} to see available agents",
-        "claude-autonomous agents".cyan()
-    );
-
     Ok(())
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// 列出 Agents
-// ═══════════════════════════════════════════════════════════════════
+/// 执行内部命令
+fn execute_command(app: &mut App) -> Result<()> {
+    let cmd = app.input_buffer.trim().to_lowercase();
 
-fn list_agents() -> Result<()> {
-    println!("{}", "📦 Embedded Agents:".cyan().bold());
-    println!();
-
-    let agents = AgentAssets::list_agents();
-
-    for agent in agents {
-        println!("  {} {}", "•".green(), agent.yellow());
-    }
-
-    println!();
-    println!(
-        "{} {} embedded agents available",
-        "✓".green(),
-        AgentAssets::list_agents().len()
-    );
-    println!();
-    println!(
-        "💡 All agents are pre-installed in {}",
-        ".claude/agents/".cyan()
-    );
-
-    Ok(())
-}
-
-// ═══════════════════════════════════════════════════════════════════
-// 诊断环境
-// ═══════════════════════════════════════════════════════════════════
-
-fn doctor() -> Result<()> {
-    use std::fs;
-
-    println!(
-        "{}",
-        "🔍 Claude Autonomous Engineering Doctor".cyan().bold()
-    );
-    println!();
-
-    // 检查项目根目录
-    print!("📁 Project root detection... ");
-    match find_project_root() {
-        Some(root) => {
-            println!("{}", "✓".green());
-            println!("   {}", root.display().to_string().yellow());
+    match cmd.as_str() {
+        "quit" | "q" => {
+            app.should_quit = true;
         }
-        None => {
-            println!("{}", "✗".red());
-            println!("   {}", "No .claude directory found in current path".red());
-            println!("   Run {} to initialize", "claude-autonomous init".cyan());
-        }
-    }
-
-    if let Some(root) = find_project_root() {
-        println!();
-        println!("📂 Directory structure:");
-
-        let dirs = vec![
-            (".claude/agents", "Agent definitions"),
-            (".claude/status", "State files"),
-            (".claude/phases", "Phase plans"),
-        ];
-
-        for (dir, desc) in dirs {
-            let path = root.join(dir);
-            if path.exists() {
-                let count = fs::read_dir(&path)?.count();
-                println!("   {} {} ({} items)", "✓".green(), desc.yellow(), count);
-            } else {
-                println!("   {} {} {}", "✗".red(), desc.yellow(), "(missing)".red());
+        "clear" | "cls" => {
+            if let Ok(mut state) = app.terminal_state.lock() {
+                state.output_buffer.clear();
             }
+            app.status_message = "Buffer cleared".to_string();
         }
-
-        println!();
-        println!("📝 Configuration files:");
-
-        let files = vec![
-            ("CLAUDE.md", "Project instructions"),
-            (".claude/settings.json", "Hook configuration"),
-            (".claude/status/memory.json", "State memory"),
-            (".claude/status/ROADMAP.md", "Task roadmap"),
-            (".claude/status/api_contract.yaml", "API contract"),
-        ];
-
-        for (file, desc) in files {
-            let path = root.join(file);
-            if path.exists() {
-                println!("   {} {}", "✓".green(), desc.yellow());
-            } else {
-                println!("   {} {} {}", "✗".red(), desc.yellow(), "(missing)".red());
-            }
+        "help" | "?" => {
+            app.status_message =
+                "Commands: quit, clear, help | Ctrl+Q to quit".to_string();
         }
-
-        println!();
-        println!("🎯 Hooks:");
-        let hooks = vec![
-            "inject_state",
-            "progress_sync",
-            "codex_review_gate",
-            "loop_driver",
-        ];
-        for hook in hooks {
-            println!("   {} {}", "✓".green(), hook.cyan());
-        }
-    }
-
-    println!();
-    println!("{}", "✅ Diagnostic complete".green().bold());
-
-    Ok(())
-}
-
-// ═══════════════════════════════════════════════════════════════════
-// Repository Map
-// ═══════════════════════════════════════════════════════════════════
-
-fn generate_repo_map(output: Option<String>, force: bool, format_str: String) -> Result<()> {
-    use claude_autonomous::repo_map::{OutputFormat, RepoMapper};
-    use std::time::Instant;
-
-    let project_root = match find_project_root() {
-        Some(root) => root,
-        None => {
-            println!("{}", "❌ No .claude directory found".red());
-            println!("Run {} to initialize", "claude-autonomous init".cyan());
-            return Ok(());
-        }
-    };
-
-    // 解析格式参数
-    let format = match format_str.to_lowercase().as_str() {
-        "markdown" | "md" => OutputFormat::Markdown,
-        "toon" => OutputFormat::Toon,
-        "toon-grouped" | "grouped" => OutputFormat::ToonGrouped,
         _ => {
-            println!("{}", format!("❌ Unknown format: {}", format_str).red());
-            println!("Available formats: markdown, toon, toon-grouped");
-            return Ok(());
+            app.status_message = format!("Unknown command: {}", cmd);
         }
-    };
-
-    let format_name = match format {
-        OutputFormat::Markdown => "Markdown",
-        OutputFormat::Toon => "TOON",
-        OutputFormat::ToonGrouped => "TOON (Grouped)",
-    };
-
-    println!(
-        "{}",
-        format!("🗺️  Generating Repository Map ({})...", format_name)
-            .cyan()
-            .bold()
-    );
-    println!();
-
-    let start = Instant::now();
-
-    // 如果强制重新生成，清除缓存
-    if force {
-        let cache_file = project_root.join(".claude/repo_map/cache.json");
-        if cache_file.exists() {
-            std::fs::remove_file(&cache_file)?;
-            println!("{}", "   🗑️  Cleared cache".yellow());
-        }
-    }
-
-    // 生成 map
-    let mut mapper = RepoMapper::new(&project_root)?;
-    let content = mapper.generate_map_with_format(format)?;
-
-    // 确定输出路径和扩展名
-    let default_extension = match format {
-        OutputFormat::Markdown => "md",
-        OutputFormat::Toon | OutputFormat::ToonGrouped => "toon",
-    };
-
-    let output_path = if let Some(path) = output {
-        project_root.join(path)
-    } else {
-        project_root.join(format!(".claude/repo_map/structure.{}", default_extension))
-    };
-
-    // 确保目录存在
-    if let Some(parent) = output_path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-
-    // 写入文件
-    std::fs::write(&output_path, &content)?;
-
-    let elapsed = start.elapsed();
-
-    // Token 统计（简单估算）
-    let token_count = content.split_whitespace().count();
-    let token_saved_msg = match format {
-        OutputFormat::Toon | OutputFormat::ToonGrouped => {
-            format!(
-                " (预计节省 30-60% tokens，约 {} tokens)",
-                token_count.to_string().cyan()
-            )
-        }
-        OutputFormat::Markdown => String::new(),
-    };
-
-    println!();
-    println!("{}", "✅ Repository Map generated!".green().bold());
-    println!("   📁 Output: {}", output_path.display().to_string().cyan());
-    println!("   📊 Format: {}{}", format_name.cyan(), token_saved_msg);
-    println!("   ⏱️  Time: {:.2}s", elapsed.as_secs_f64());
-    println!();
-
-    if matches!(format, OutputFormat::Toon | OutputFormat::ToonGrouped) {
-        println!("💡 Tip: TOON 格式可减少 30-60% token 消耗，更适合 LLM 处理");
-    } else {
-        println!("💡 Tip: Repository Map 已保存，可用于减少 token 消耗");
     }
 
     Ok(())
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// Main
-// ═══════════════════════════════════════════════════════════════════
+/// 将键盘事件转换为字节
+fn key_to_bytes(key: crossterm::event::KeyEvent) -> Vec<u8> {
+    match key.code {
+        KeyCode::Char(c) => {
+            if key.modifiers.contains(KeyModifiers::CONTROL) {
+                // Ctrl+字母 -> 控制字符
+                let ctrl_char = (c as u8) & 0x1f;
+                vec![ctrl_char]
+            } else {
+                c.to_string().into_bytes()
+            }
+        }
+        KeyCode::Enter => vec![b'\r'],
+        KeyCode::Backspace => vec![0x7f], // DEL
+        KeyCode::Tab => vec![b'\t'],
+        KeyCode::Esc => vec![0x1b],
+        KeyCode::Up => vec![0x1b, b'[', b'A'],
+        KeyCode::Down => vec![0x1b, b'[', b'B'],
+        KeyCode::Right => vec![0x1b, b'[', b'C'],
+        KeyCode::Left => vec![0x1b, b'[', b'D'],
+        KeyCode::Home => vec![0x1b, b'[', b'H'],
+        KeyCode::End => vec![0x1b, b'[', b'F'],
+        KeyCode::PageUp => vec![0x1b, b'[', b'5', b'~'],
+        KeyCode::PageDown => vec![0x1b, b'[', b'6', b'~'],
+        KeyCode::Delete => vec![0x1b, b'[', b'3', b'~'],
+        KeyCode::Insert => vec![0x1b, b'[', b'2', b'~'],
+        KeyCode::F(n) => {
+            // F1-F12 的转义序列
+            match n {
+                1 => vec![0x1b, b'O', b'P'],
+                2 => vec![0x1b, b'O', b'Q'],
+                3 => vec![0x1b, b'O', b'R'],
+                4 => vec![0x1b, b'O', b'S'],
+                5 => vec![0x1b, b'[', b'1', b'5', b'~'],
+                6 => vec![0x1b, b'[', b'1', b'7', b'~'],
+                7 => vec![0x1b, b'[', b'1', b'8', b'~'],
+                8 => vec![0x1b, b'[', b'1', b'9', b'~'],
+                9 => vec![0x1b, b'[', b'2', b'0', b'~'],
+                10 => vec![0x1b, b'[', b'2', b'1', b'~'],
+                11 => vec![0x1b, b'[', b'2', b'3', b'~'],
+                12 => vec![0x1b, b'[', b'2', b'4', b'~'],
+                _ => vec![],
+            }
+        }
+        _ => vec![],
+    }
+}
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Init { name, force } => {
-            let cwd = env::current_dir()?;
-            init_project(&cwd, name.as_deref(), force)
-        }
-        Commands::Hook { name } => run_hook(&name),
-        Commands::Root => {
-            match find_project_root() {
-                Some(root) => println!("{}", root.display()),
-                None => {
-                    eprintln!("{}", "No .claude directory found".red());
-                    std::process::exit(1);
-                }
-            }
-            Ok(())
-        }
-        Commands::Status => show_status(),
-        Commands::Agents => list_agents(),
-        Commands::Doctor => doctor(),
-        Commands::Map {
-            output,
-            force,
-            format,
-        } => generate_repo_map(output, force, format),
-        Commands::State(cmd) => {
-            use claude_autonomous::cli;
-
-            match cmd {
-                StateCommands::List => cli::list_states(),
-                StateCommands::Current => cli::show_current_state(),
-                StateCommands::Rollback { tag } => cli::rollback_to_tag(&tag),
-                StateCommands::Graph { task_id } => cli::show_state_graph(task_id.as_deref()),
-                StateCommands::Transition { state, task_id } => {
-                    cli::transition_to(&state, task_id.as_deref())
-                }
-                StateCommands::Help => cli::show_workflow_help(),
-            }
-        }
+        Some(Commands::Hook { name }) => run_hook(&name),
+        None => run_tui(cli.shell),
     }
 }

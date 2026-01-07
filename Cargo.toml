@@ -19,7 +19,17 @@ name = "claude_autonomous"
 path = "src/lib.rs"
 
 [dependencies]
-# CLI
+# TUI 框架
+ratatui = { version = "0.29", default-features = false, features = ["crossterm"] }
+crossterm = "0.28"
+
+# PTY 管理
+portable-pty = "0.8"
+
+# 异步运行时
+tokio = { version = "1", features = ["full"] }
+
+# CLI (保留用于兼容)
 clap = { version = "4.5", features = ["derive", "cargo"] }
 colored = "2.1"
 

@@ -1,12 +1,14 @@
 //! Claude Autonomous Engineering Library
 //!
 //! 纯 Rust 实现的自动化工程系统，提供：
+//! - TUI 界面（基于 Ratatui 的多智能体会话管理）
 //! - Hook 系统（状态注入、进度同步、代码审查、循环驱动）
 //! - 上下文管理（智能组装项目状态）
 //! - 状态管理（解析和同步 Markdown/JSON/YAML）
 //! - 资源嵌入（Agent 定义和模板）
 
 // 模块声明
+pub mod tui;  // TUI 模块 (新增)
 pub mod cli;
 pub mod context;
 pub mod hooks;
