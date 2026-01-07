@@ -2,6 +2,8 @@
 //!
 //! 使用 Tree-sitter 解析源代码，提取函数签名、结构体定义等骨架信息，
 //! 减少 90% 的 token 消耗，同时保持代码结构的完整性。
+//!
+//! Phase 2: 支持后台增量更新
 
 pub mod cache;
 pub mod extractor;
@@ -9,6 +11,7 @@ pub mod generator;
 pub mod generator_toon;
 pub mod languages;
 pub mod parser;
+pub mod service;
 
 use anyhow::Result;
 use std::path::{Path, PathBuf};

@@ -86,33 +86,69 @@ pub fn render_context_panel(frame: &mut Frame, area: Rect, app: &App) {
     }
     lines.push(Line::from(""));
 
-    // 文件变更
+    // 文件变更 & RepoMap 状态
     lines.push(Line::from(vec![
-        Span::styled(" Changes ", Style::default().fg(Color::Yellow)),
+        Span::styled(" RepoMap ", Style::default().fg(Color::Yellow)),
     ]));
 
-    if summary.recent_changes > 0 {
-        let change_style = if summary.repo_map_stale {
-            Style::default().fg(Color::Red)
-        } else {
-            Style::default().fg(Color::White)
-        };
-
-        lines.push(Line::from(vec![
-            Span::raw("  "),
-            Span::styled(format!("{} files", summary.recent_changes), change_style),
-        ]));
-
-        if summary.repo_map_stale {
-            lines.push(Line::from(vec![
-                Span::raw("  "),
-                Span::styled("⚠ Map stale", Style::default().fg(Color::Red)),
-            ]));
+    // 显示 RepoMap 服务状态
+    if let Some(status) = app.repo_map_status() {
+        use crate::repo_map::service::UpdateStatus;
+        match status {
+            UpdateStatus::Idle => {
+                lines.push(Line::from(vec![
+                    Span::raw("  "),
+                    Span::styled("● Ready", Style::default().fg(Color::Green)),
+                ]));
+            }
+            UpdateStatus::Updating => {
+                lines.push(Line::from(vec![
+                    Span::raw("  "),
+                    Span::styled("◐ Updating...", Style::default().fg(Color::Cyan)),
+                ]));
+            }
+            UpdateStatus::Completed { duration_ms, files_processed } => {
+                lines.push(Line::from(vec![
+                    Span::raw("  "),
+                    Span::styled("✓ Updated", Style::default().fg(Color::Green)),
+                ]));
+                lines.push(Line::from(vec![
+                    Span::raw("  "),
+                    Span::styled(
+                        format!("{}ms, {} files", duration_ms, files_processed),
+                        Style::default().fg(Color::DarkGray),
+                    ),
+                ]));
+            }
+            UpdateStatus::Failed(ref msg) => {
+                lines.push(Line::from(vec![
+                    Span::raw("  "),
+                    Span::styled("✗ Failed", Style::default().fg(Color::Red)),
+                ]));
+                lines.push(Line::from(vec![
+                    Span::raw("  "),
+                    Span::styled(
+                        truncate_str(msg, 20),
+                        Style::default().fg(Color::Red),
+                    ),
+                ]));
+            }
         }
     } else {
         lines.push(Line::from(vec![
             Span::raw("  "),
-            Span::styled("No changes", Style::default().fg(Color::DarkGray)),
+            Span::styled("Not active", Style::default().fg(Color::DarkGray)),
+        ]));
+    }
+
+    // 显示变更计数
+    if summary.recent_changes > 0 {
+        lines.push(Line::from(vec![
+            Span::raw("  "),
+            Span::styled(
+                format!("{} changes", summary.recent_changes),
+                Style::default().fg(Color::White),
+            ),
         ]));
     }
     lines.push(Line::from(""));

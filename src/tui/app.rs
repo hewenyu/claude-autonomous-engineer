@@ -14,6 +14,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use crate::context::ContextManager;
+use crate::repo_map::service::{RepoMapService, UpdateStatus};
 use crate::tui::pty::PtyManager;
 use crate::watcher::{FileChange, FileChangeKind};
 
@@ -90,6 +91,9 @@ pub struct App {
 
     /// 是否显示上下文面板
     pub show_context_panel: bool,
+
+    /// RepoMap 后台更新服务
+    pub repo_map_service: Option<RepoMapService>,
 }
 
 impl App {
@@ -115,6 +119,7 @@ impl App {
             context_summary: ContextSummary::default(),
             pending_file_changes: Vec::new(),
             show_context_panel: false,
+            repo_map_service: None,
         }
     }
 
@@ -122,8 +127,17 @@ impl App {
     pub fn with_project(cols: u16, rows: u16, project_root: PathBuf) -> Self {
         let mut app = Self::new(cols, rows);
         app.project_root = Some(project_root.clone());
-        app.context_manager = Some(ContextManager::new(project_root));
+        app.context_manager = Some(ContextManager::new(project_root.clone()));
         app.show_context_panel = true;
+
+        // 初始化 RepoMap 服务
+        let output_path = project_root.join(".claude/repo_map/structure.toon");
+        if let Ok(service) = RepoMapService::start(project_root, output_path) {
+            // 启动时触发一次全量更新
+            let _ = service.request_full();
+            app.repo_map_service = Some(service);
+        }
+
         app.refresh_context_summary();
         app
     }
@@ -151,11 +165,21 @@ impl App {
         let code_changes: Vec<_> = changes
             .iter()
             .filter(|c| c.needs_repo_map_update())
+            .cloned()
             .collect();
 
         if !code_changes.is_empty() {
             self.context_summary.repo_map_stale = true;
             self.context_summary.recent_changes += code_changes.len();
+
+            // 触发增量 repo_map 更新
+            if let Some(ref service) = self.repo_map_service {
+                let paths: Vec<_> = code_changes.iter().map(|c| c.path.clone()).collect();
+                if service.request_incremental(paths).is_ok() {
+                    // 请求已发送，标记为更新中
+                    self.context_summary.repo_map_stale = false;
+                }
+            }
         }
 
         // 如果有状态文件变更，刷新上下文摘要
@@ -168,6 +192,19 @@ impl App {
         }
 
         self.pending_file_changes.extend(changes);
+    }
+
+    /// 获取 RepoMap 服务状态 (Phase 2)
+    pub fn repo_map_status(&self) -> Option<UpdateStatus> {
+        self.repo_map_service.as_ref().map(|s| s.status())
+    }
+
+    /// RepoMap 是否正在更新 (Phase 2)
+    pub fn is_repo_map_updating(&self) -> bool {
+        self.repo_map_service
+            .as_ref()
+            .map(|s| s.is_updating())
+            .unwrap_or(false)
     }
 
     /// 切换上下文面板显示 (Phase 2)
