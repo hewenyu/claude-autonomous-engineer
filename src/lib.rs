@@ -8,7 +8,8 @@
 //! - 资源嵌入（Agent 定义和模板）
 
 // 模块声明
-pub mod tui;  // TUI 模块 (新增)
+pub mod tui;        // TUI 模块 (Phase 1)
+pub mod watcher;    // 文件监听模块 (Phase 2)
 pub mod cli;
 pub mod context;
 pub mod hooks;

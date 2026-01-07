@@ -68,6 +68,10 @@ rayon = "1.8"
 # Git State Machine
 git2 = "0.18"
 
+# File Watching (Phase 2: Context Engine)
+notify = { version = "6.1", default-features = false, features = ["macos_fsevent"] }
+notify-debouncer-mini = "0.4"
+
 # 资源嵌入
 rust-embed = "8.9"
 

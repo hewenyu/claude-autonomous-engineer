@@ -5,12 +5,16 @@
 //! - PTY 输出
 //! - 窗口大小变化
 //! - 定时器 tick
+//! - 文件变更 (Phase 2)
 
 use crossterm::event::{self, Event as CrosstermEvent, KeyEvent, MouseEvent};
 use std::io::Read;
+use std::path::PathBuf;
 use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
+
+use crate::watcher::{FileChange, FileWatcher};
 
 /// TUI 事件类型
 #[derive(Debug)]
@@ -32,6 +36,9 @@ pub enum Event {
 
     /// 定时器 tick（用于渲染刷新）
     Tick,
+
+    /// 文件变更事件 (Phase 2: Context Engine)
+    FileChanged(Vec<FileChange>),
 
     /// 错误事件
     Error(String),
@@ -133,5 +140,38 @@ impl EventHandler {
                 }
             }
         });
+    }
+
+    /// 启动文件监听线程 (Phase 2: Context Engine)
+    ///
+    /// 监听项目目录的文件变更，发送 FileChanged 事件
+    pub fn start_file_watcher(&self, project_root: PathBuf) -> anyhow::Result<()> {
+        let tx = self.tx.clone();
+
+        // 创建文件监听器 (500ms debounce)
+        let watcher = FileWatcher::default(project_root)?;
+
+        thread::spawn(move || {
+            loop {
+                // 阻塞等待文件变更
+                match watcher.wait_for_changes() {
+                    Ok(changes) if !changes.is_empty() => {
+                        if tx.send(Event::FileChanged(changes)).is_err() {
+                            break;
+                        }
+                    }
+                    Ok(_) => {
+                        // 空变更，继续等待
+                    }
+                    Err(e) => {
+                        let _ = tx.send(Event::Error(format!("File watcher error: {}", e)));
+                        // 出错后稍等再重试，避免忙循环
+                        thread::sleep(Duration::from_secs(1));
+                    }
+                }
+            }
+        });
+
+        Ok(())
     }
 }

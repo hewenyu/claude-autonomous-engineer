@@ -66,7 +66,14 @@ fn run_tui(use_shell: bool) -> Result<()> {
 
     // 获取终端大小
     let size = terminal.size()?;
-    let mut app = App::new(size.width, size.height);
+
+    // Phase 2: 尝试找到项目根目录并创建带上下文的 App
+    let project_root = claude_autonomous::find_project_root();
+    let mut app = if let Some(ref root) = project_root {
+        App::with_project(size.width, size.height, root.clone())
+    } else {
+        App::new(size.width, size.height)
+    };
 
     // 启动进程
     let reader = if use_shell {
@@ -81,6 +88,14 @@ fn run_tui(use_shell: bool) -> Result<()> {
 
     // 启动 PTY 读取线程
     events.start_pty_reader(reader);
+
+    // Phase 2: 启动文件监听线程（如果有项目根目录）
+    if let Some(ref root) = project_root {
+        if let Err(e) = events.start_file_watcher(root.clone()) {
+            // 文件监听失败不是致命错误，只记录警告
+            app.status_message = format!("File watcher failed: {} | Ctrl+Q to quit", e);
+        }
+    }
 
     // 主事件循环
     loop {
@@ -109,6 +124,10 @@ fn run_tui(use_shell: bool) -> Result<()> {
                 }
                 Event::Error(e) => {
                     app.status_message = format!("Error: {}", e);
+                }
+                Event::FileChanged(changes) => {
+                    // Phase 2: 处理文件变更
+                    app.handle_file_changes(changes);
                 }
                 Event::Tick | Event::Mouse(_) => {
                     // 只触发重新渲染
@@ -152,6 +171,10 @@ fn handle_key_event(
                 (KeyModifiers::CONTROL, KeyCode::Char('b')) => {
                     app.mode = AppMode::Command;
                     app.status_message = "Command mode | ESC to exit | Enter to execute".to_string();
+                }
+                // Ctrl+P 切换上下文面板 (Phase 2)
+                (KeyModifiers::CONTROL, KeyCode::Char('p')) => {
+                    app.toggle_context_panel();
                 }
                 // 其他按键发送到 PTY
                 _ => {

@@ -5,13 +5,17 @@
 //! - PTY 连接
 //! - 终端仿真器 (vt100)
 //! - 状态消息
+//! - 上下文管理器 (Phase 2)
 
 use anyhow::Result;
 use portable_pty::{Child, PtySize};
 use std::io::Write;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
+use crate::context::ContextManager;
 use crate::tui::pty::PtyManager;
+use crate::watcher::{FileChange, FileChangeKind};
 
 /// 应用运行模式
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -22,6 +26,21 @@ pub enum AppMode {
     Command,
     /// 退出确认
     Quitting,
+}
+
+/// 上下文摘要 (Phase 2: 用于 UI 显示)
+#[derive(Debug, Clone, Default)]
+pub struct ContextSummary {
+    /// 当前任务 ID
+    pub current_task: Option<String>,
+    /// 任务进度 (完成/总数)
+    pub progress: (usize, usize),
+    /// 最近变更的文件数
+    pub recent_changes: usize,
+    /// repo_map 是否需要更新
+    pub repo_map_stale: bool,
+    /// 错误计数
+    pub error_count: usize,
 }
 
 /// 应用状态
@@ -52,6 +71,25 @@ pub struct App {
 
     /// 输入缓冲区（命令模式）
     pub input_buffer: String,
+
+    // ═══════════════════════════════════════════════════════════════════
+    // Phase 2: 上下文引擎
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// 项目根目录
+    pub project_root: Option<PathBuf>,
+
+    /// 上下文管理器
+    pub context_manager: Option<ContextManager>,
+
+    /// 上下文摘要 (用于 UI 显示)
+    pub context_summary: ContextSummary,
+
+    /// 待处理的文件变更
+    pub pending_file_changes: Vec<FileChange>,
+
+    /// 是否显示上下文面板
+    pub show_context_panel: bool,
 }
 
 impl App {
@@ -71,6 +109,74 @@ impl App {
             terminal_size: (cols, rows),
             status_message: String::from("Press Ctrl+Q to quit | Ctrl+B for command mode"),
             input_buffer: String::new(),
+            // Phase 2 fields
+            project_root: None,
+            context_manager: None,
+            context_summary: ContextSummary::default(),
+            pending_file_changes: Vec::new(),
+            show_context_panel: false,
+        }
+    }
+
+    /// 创建带项目上下文的应用实例 (Phase 2)
+    pub fn with_project(cols: u16, rows: u16, project_root: PathBuf) -> Self {
+        let mut app = Self::new(cols, rows);
+        app.project_root = Some(project_root.clone());
+        app.context_manager = Some(ContextManager::new(project_root));
+        app.show_context_panel = true;
+        app.refresh_context_summary();
+        app
+    }
+
+    /// 刷新上下文摘要 (Phase 2)
+    pub fn refresh_context_summary(&mut self) {
+        if let Some(ref manager) = self.context_manager {
+            // 读取 memory.json 获取当前状态
+            let memory_path = manager.project_root.join(".claude/status/memory.json");
+            if let Ok(content) = std::fs::read_to_string(&memory_path) {
+                if let Ok(memory) = serde_json::from_str::<crate::state::Memory>(&content) {
+                    self.context_summary.current_task = memory.current_task.id.clone();
+                    self.context_summary.progress = (
+                        memory.progress.tasks_completed,
+                        memory.progress.tasks_total,
+                    );
+                    self.context_summary.error_count = memory.error_state.error_count as usize;
+                }
+            }
+        }
+    }
+
+    /// 处理文件变更事件 (Phase 2)
+    pub fn handle_file_changes(&mut self, changes: Vec<FileChange>) {
+        let code_changes: Vec<_> = changes
+            .iter()
+            .filter(|c| c.needs_repo_map_update())
+            .collect();
+
+        if !code_changes.is_empty() {
+            self.context_summary.repo_map_stale = true;
+            self.context_summary.recent_changes += code_changes.len();
+        }
+
+        // 如果有状态文件变更，刷新上下文摘要
+        let has_state_changes = changes
+            .iter()
+            .any(|c| matches!(c.kind, FileChangeKind::State));
+
+        if has_state_changes {
+            self.refresh_context_summary();
+        }
+
+        self.pending_file_changes.extend(changes);
+    }
+
+    /// 切换上下文面板显示 (Phase 2)
+    pub fn toggle_context_panel(&mut self) {
+        self.show_context_panel = !self.show_context_panel;
+        if self.show_context_panel {
+            self.status_message = "Context panel ON | Ctrl+P to toggle".to_string();
+        } else {
+            self.status_message = "Context panel OFF | Ctrl+P to toggle".to_string();
         }
     }
 
