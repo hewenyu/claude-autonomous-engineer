@@ -8,8 +8,6 @@
 //! - 资源嵌入（Agent 定义和模板）
 
 // 模块声明
-pub mod tui;        // TUI 模块 (Phase 1)
-pub mod watcher;    // 文件监听模块 (Phase 2)
 pub mod cli;
 pub mod context;
 pub mod hooks;
@@ -18,7 +16,9 @@ pub mod repo_map;
 pub mod state;
 pub mod state_machine;
 pub mod templates;
+pub mod tui; // TUI 模块 (Phase 1)
 pub mod utils;
+pub mod watcher; // 文件监听模块 (Phase 2)
 
 // 重导出常用类型
 pub use anyhow::{Context as AnyhowContext, Result};

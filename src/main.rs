@@ -114,10 +114,8 @@ fn run_tui(use_shell: bool) -> Result<()> {
                     app.process_pty_output(&data);
                 }
                 Event::PtyExit(code) => {
-                    app.status_message = format!(
-                        "Process exited (code: {:?}) | Press any key to quit",
-                        code
-                    );
+                    app.status_message =
+                        format!("Process exited (code: {:?}) | Press any key to quit", code);
                 }
                 Event::Resize(w, h) => {
                     app.resize(w, h)?;
@@ -151,10 +149,7 @@ fn run_tui(use_shell: bool) -> Result<()> {
 }
 
 /// 处理键盘事件
-fn handle_key_event(
-    app: &mut App,
-    key: crossterm::event::KeyEvent,
-) -> Result<()> {
+fn handle_key_event(app: &mut App, key: crossterm::event::KeyEvent) -> Result<()> {
     match app.mode {
         AppMode::Normal => {
             match (key.modifiers, key.code) {
@@ -170,7 +165,8 @@ fn handle_key_event(
                 // Ctrl+B 进入命令模式
                 (KeyModifiers::CONTROL, KeyCode::Char('b')) => {
                     app.mode = AppMode::Command;
-                    app.status_message = "Command mode | ESC to exit | Enter to execute".to_string();
+                    app.status_message =
+                        "Command mode | ESC to exit | Enter to execute".to_string();
                 }
                 // Ctrl+P 切换上下文面板 (Phase 2)
                 (KeyModifiers::CONTROL, KeyCode::Char('p')) => {
@@ -183,40 +179,34 @@ fn handle_key_event(
                 }
             }
         }
-        AppMode::Command => {
-            match key.code {
-                KeyCode::Esc => {
-                    app.mode = AppMode::Normal;
-                    app.input_buffer.clear();
-                    app.status_message =
-                        "Press Ctrl+Q to quit | Ctrl+B for command mode".to_string();
-                }
-                KeyCode::Enter => {
-                    execute_command(app)?;
-                    app.mode = AppMode::Normal;
-                    app.input_buffer.clear();
-                }
-                KeyCode::Char(c) => {
-                    app.input_buffer.push(c);
-                }
-                KeyCode::Backspace => {
-                    app.input_buffer.pop();
-                }
-                _ => {}
+        AppMode::Command => match key.code {
+            KeyCode::Esc => {
+                app.mode = AppMode::Normal;
+                app.input_buffer.clear();
+                app.status_message = "Press Ctrl+Q to quit | Ctrl+B for command mode".to_string();
             }
-        }
-        AppMode::Quitting => {
-            match key.code {
-                KeyCode::Char('y') | KeyCode::Char('Y') => {
-                    app.should_quit = true;
-                }
-                _ => {
-                    app.mode = AppMode::Normal;
-                    app.status_message =
-                        "Press Ctrl+Q to quit | Ctrl+B for command mode".to_string();
-                }
+            KeyCode::Enter => {
+                execute_command(app)?;
+                app.mode = AppMode::Normal;
+                app.input_buffer.clear();
             }
-        }
+            KeyCode::Char(c) => {
+                app.input_buffer.push(c);
+            }
+            KeyCode::Backspace => {
+                app.input_buffer.pop();
+            }
+            _ => {}
+        },
+        AppMode::Quitting => match key.code {
+            KeyCode::Char('y') | KeyCode::Char('Y') => {
+                app.should_quit = true;
+            }
+            _ => {
+                app.mode = AppMode::Normal;
+                app.status_message = "Press Ctrl+Q to quit | Ctrl+B for command mode".to_string();
+            }
+        },
     }
     Ok(())
 }
@@ -238,8 +228,7 @@ fn execute_command(app: &mut App) -> Result<()> {
             app.status_message = "Screen cleared".to_string();
         }
         "help" | "?" => {
-            app.status_message =
-                "Commands: quit, clear, help | Ctrl+Q to quit".to_string();
+            app.status_message = "Commands: quit, clear, help | Ctrl+Q to quit".to_string();
         }
         _ => {
             app.status_message = format!("Unknown command: {}", cmd);

@@ -65,8 +65,7 @@ impl FileChange {
 
         // 代码文件
         let code_extensions = [
-            ".rs", ".py", ".go", ".ts", ".tsx", ".js", ".jsx",
-            ".java", ".c", ".cpp", ".h", ".hpp",
+            ".rs", ".py", ".go", ".ts", ".tsx", ".js", ".jsx", ".java", ".c", ".cpp", ".h", ".hpp",
         ];
         if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
             let ext_with_dot = format!(".{}", ext);
@@ -115,10 +114,7 @@ impl FileWatcher {
     pub fn new(project_root: PathBuf, debounce_ms: u64) -> Result<Self> {
         let (tx, rx) = mpsc::channel();
 
-        let mut debouncer = new_debouncer(
-            Duration::from_millis(debounce_ms),
-            tx,
-        )?;
+        let mut debouncer = new_debouncer(Duration::from_millis(debounce_ms), tx)?;
 
         // 监听项目根目录
         debouncer
@@ -205,10 +201,7 @@ impl FileWatcher {
         }
 
         // 忽略临时文件
-        if path_str.ends_with(".swp")
-            || path_str.ends_with(".tmp")
-            || path_str.ends_with("~")
-        {
+        if path_str.ends_with(".swp") || path_str.ends_with(".tmp") || path_str.ends_with("~") {
             return true;
         }
 

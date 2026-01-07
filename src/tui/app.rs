@@ -76,7 +76,6 @@ pub struct App {
     // ═══════════════════════════════════════════════════════════════════
     // Phase 2: 上下文引擎
     // ═══════════════════════════════════════════════════════════════════
-
     /// 项目根目录
     pub project_root: Option<PathBuf>,
 
@@ -150,10 +149,8 @@ impl App {
             if let Ok(content) = std::fs::read_to_string(&memory_path) {
                 if let Ok(memory) = serde_json::from_str::<crate::state::Memory>(&content) {
                     self.context_summary.current_task = memory.current_task.id.clone();
-                    self.context_summary.progress = (
-                        memory.progress.tasks_completed,
-                        memory.progress.tasks_total,
-                    );
+                    self.context_summary.progress =
+                        (memory.progress.tasks_completed, memory.progress.tasks_total);
                     self.context_summary.error_count = memory.error_state.error_count as usize;
                 }
             }

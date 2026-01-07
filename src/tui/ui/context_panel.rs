@@ -27,15 +27,19 @@ pub fn render_context_panel(frame: &mut Frame, area: Rect, app: &App) {
     let mut lines = Vec::new();
 
     // 标题区域
-    lines.push(Line::from(vec![
-        Span::styled(" Context ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-    ]));
+    lines.push(Line::from(vec![Span::styled(
+        " Context ",
+        Style::default()
+            .fg(Color::Cyan)
+            .add_modifier(Modifier::BOLD),
+    )]));
     lines.push(Line::from(""));
 
     // 当前任务
-    lines.push(Line::from(vec![
-        Span::styled(" Task ", Style::default().fg(Color::Yellow)),
-    ]));
+    lines.push(Line::from(vec![Span::styled(
+        " Task ",
+        Style::default().fg(Color::Yellow),
+    )]));
 
     if let Some(ref task_id) = summary.current_task {
         lines.push(Line::from(vec![
@@ -51,9 +55,10 @@ pub fn render_context_panel(frame: &mut Frame, area: Rect, app: &App) {
     lines.push(Line::from(""));
 
     // 进度条
-    lines.push(Line::from(vec![
-        Span::styled(" Progress ", Style::default().fg(Color::Yellow)),
-    ]));
+    lines.push(Line::from(vec![Span::styled(
+        " Progress ",
+        Style::default().fg(Color::Yellow),
+    )]));
 
     let (completed, total) = summary.progress;
     if total > 0 {
@@ -61,11 +66,7 @@ pub fn render_context_panel(frame: &mut Frame, area: Rect, app: &App) {
         let bar_width = 20;
         let filled = (bar_width as f64 * completed as f64 / total as f64) as usize;
 
-        let bar: String = format!(
-            "[{}{}]",
-            "█".repeat(filled),
-            "░".repeat(bar_width - filled)
-        );
+        let bar: String = format!("[{}{}]", "█".repeat(filled), "░".repeat(bar_width - filled));
 
         lines.push(Line::from(vec![
             Span::raw("  "),
@@ -87,9 +88,10 @@ pub fn render_context_panel(frame: &mut Frame, area: Rect, app: &App) {
     lines.push(Line::from(""));
 
     // 文件变更 & RepoMap 状态
-    lines.push(Line::from(vec![
-        Span::styled(" RepoMap ", Style::default().fg(Color::Yellow)),
-    ]));
+    lines.push(Line::from(vec![Span::styled(
+        " RepoMap ",
+        Style::default().fg(Color::Yellow),
+    )]));
 
     // 显示 RepoMap 服务状态
     if let Some(status) = app.repo_map_status() {
@@ -107,7 +109,10 @@ pub fn render_context_panel(frame: &mut Frame, area: Rect, app: &App) {
                     Span::styled("◐ Updating...", Style::default().fg(Color::Cyan)),
                 ]));
             }
-            UpdateStatus::Completed { duration_ms, files_processed } => {
+            UpdateStatus::Completed {
+                duration_ms,
+                files_processed,
+            } => {
                 lines.push(Line::from(vec![
                     Span::raw("  "),
                     Span::styled("✓ Updated", Style::default().fg(Color::Green)),
@@ -127,10 +132,7 @@ pub fn render_context_panel(frame: &mut Frame, area: Rect, app: &App) {
                 ]));
                 lines.push(Line::from(vec![
                     Span::raw("  "),
-                    Span::styled(
-                        truncate_str(msg, 20),
-                        Style::default().fg(Color::Red),
-                    ),
+                    Span::styled(truncate_str(msg, 20), Style::default().fg(Color::Red)),
                 ]));
             }
         }
@@ -154,9 +156,10 @@ pub fn render_context_panel(frame: &mut Frame, area: Rect, app: &App) {
     lines.push(Line::from(""));
 
     // 错误状态
-    lines.push(Line::from(vec![
-        Span::styled(" Errors ", Style::default().fg(Color::Yellow)),
-    ]));
+    lines.push(Line::from(vec![Span::styled(
+        " Errors ",
+        Style::default().fg(Color::Yellow),
+    )]));
 
     if summary.error_count > 0 {
         lines.push(Line::from(vec![

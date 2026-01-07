@@ -44,8 +44,8 @@ pub fn render(frame: &mut Frame, app: &App) {
         let horizontal_chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([
-                Constraint::Min(40),                       // 终端 (最小 40 列)
-                Constraint::Length(CONTEXT_PANEL_WIDTH),  // 上下文面板 (固定宽度)
+                Constraint::Min(40),                     // 终端 (最小 40 列)
+                Constraint::Length(CONTEXT_PANEL_WIDTH), // 上下文面板 (固定宽度)
             ])
             .split(main_area);
 

@@ -9,8 +9,8 @@
 
 pub mod app;
 pub mod event;
-pub mod terminal;
 pub mod pty;
+pub mod terminal;
 pub mod ui;
 
 // 重导出常用类型
