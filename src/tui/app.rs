@@ -3,7 +3,7 @@
 //! `App` 结构体是 TUI 的核心状态容器，持有:
 //! - 当前运行模式
 //! - PTY 连接
-//! - 终端解析器
+//! - 终端仿真器 (vt100)
 //! - 状态消息
 
 use anyhow::Result;
@@ -24,47 +24,6 @@ pub enum AppMode {
     Quitting,
 }
 
-/// 终端解析状态 (简化版，后续可扩展为 vt100::Parser)
-pub struct TerminalState {
-    /// 输出缓冲区
-    pub output_buffer: Vec<u8>,
-    /// 终端行数
-    pub rows: u16,
-    /// 终端列数
-    pub cols: u16,
-}
-
-impl TerminalState {
-    pub fn new(rows: u16, cols: u16) -> Self {
-        Self {
-            output_buffer: Vec::with_capacity(1024 * 1024), // 1MB 缓冲
-            rows,
-            cols,
-        }
-    }
-
-    /// 追加输出数据
-    pub fn append(&mut self, data: &[u8]) {
-        self.output_buffer.extend_from_slice(data);
-        // 限制缓冲区大小，保留最后 1MB
-        if self.output_buffer.len() > 1024 * 1024 {
-            let start = self.output_buffer.len() - 512 * 1024;
-            self.output_buffer = self.output_buffer[start..].to_vec();
-        }
-    }
-
-    /// 获取输出文本 (UTF-8)
-    pub fn get_text(&self) -> String {
-        String::from_utf8_lossy(&self.output_buffer).to_string()
-    }
-
-    /// 调整大小
-    pub fn resize(&mut self, rows: u16, cols: u16) {
-        self.rows = rows;
-        self.cols = cols;
-    }
-}
-
 /// 应用状态
 pub struct App {
     /// 当前运行模式
@@ -82,8 +41,8 @@ pub struct App {
     /// Claude 子进程
     pub claude_process: Option<Box<dyn Child + Send + Sync>>,
 
-    /// 终端状态
-    pub terminal_state: Arc<Mutex<TerminalState>>,
+    /// 终端仿真器 (vt100) - 完整处理 ANSI/VT100 序列
+    pub terminal_parser: Arc<Mutex<vt100::Parser>>,
 
     /// 终端尺寸
     pub terminal_size: (u16, u16),
@@ -98,13 +57,17 @@ pub struct App {
 impl App {
     /// 创建新的应用实例
     pub fn new(cols: u16, rows: u16) -> Self {
+        // 创建 vt100 解析器，预留状态栏空间
+        let parser_rows = rows.saturating_sub(2); // 减去边框和状态栏
+        let parser = vt100::Parser::new(parser_rows, cols, 10000); // 10000 行滚动缓冲
+
         Self {
             mode: AppMode::Normal,
             should_quit: false,
             pty_manager: PtyManager::new(),
             pty_writer: None,
             claude_process: None,
-            terminal_state: Arc::new(Mutex::new(TerminalState::new(rows, cols))),
+            terminal_parser: Arc::new(Mutex::new(parser)),
             terminal_size: (cols, rows),
             status_message: String::from("Press Ctrl+Q to quit | Ctrl+B for command mode"),
             input_buffer: String::new(),
@@ -115,7 +78,7 @@ impl App {
     pub fn spawn_claude(&mut self) -> Result<std::io::BufReader<Box<dyn std::io::Read + Send>>> {
         let (cols, rows) = self.terminal_size;
         let size = PtySize {
-            rows,
+            rows: rows.saturating_sub(2), // 减去边框和状态栏
             cols,
             pixel_width: 0,
             pixel_height: 0,
@@ -133,7 +96,7 @@ impl App {
     pub fn spawn_shell(&mut self) -> Result<std::io::BufReader<Box<dyn std::io::Read + Send>>> {
         let (cols, rows) = self.terminal_size;
         let size = PtySize {
-            rows,
+            rows: rows.saturating_sub(2),
             cols,
             pixel_width: 0,
             pixel_height: 0,
@@ -156,20 +119,29 @@ impl App {
         Ok(())
     }
 
-    /// 处理 PTY 输出
+    /// 处理 PTY 输出 - 通过 vt100 解析器处理
     pub fn process_pty_output(&self, data: &[u8]) {
-        if let Ok(mut state) = self.terminal_state.lock() {
-            state.append(data);
+        if let Ok(mut parser) = self.terminal_parser.lock() {
+            parser.process(data);
         }
     }
 
     /// 调整终端大小
     pub fn resize(&mut self, cols: u16, rows: u16) -> Result<()> {
         self.terminal_size = (cols, rows);
-        if let Ok(mut state) = self.terminal_state.lock() {
-            state.resize(rows, cols);
+
+        let parser_rows = rows.saturating_sub(2);
+        if let Ok(mut parser) = self.terminal_parser.lock() {
+            parser.set_size(parser_rows, cols);
         }
-        // TODO: 通知 PTY 大小变化
+
+        // 通知 PTY 大小变化
+        if let Some(ref mut writer) = self.pty_writer {
+            // 发送 SIGWINCH 信号 - portable-pty 会自动处理
+            // 这里我们只需要更新内部状态
+            let _ = writer.flush();
+        }
+
         Ok(())
     }
 

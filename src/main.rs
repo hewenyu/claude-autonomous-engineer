@@ -207,10 +207,12 @@ fn execute_command(app: &mut App) -> Result<()> {
             app.should_quit = true;
         }
         "clear" | "cls" => {
-            if let Ok(mut state) = app.terminal_state.lock() {
-                state.output_buffer.clear();
+            // 发送清屏序列到 vt100 parser
+            if let Ok(mut parser) = app.terminal_parser.lock() {
+                // ESC[2J - 清屏, ESC[H - 光标回到左上角
+                parser.process(b"\x1b[2J\x1b[H");
             }
-            app.status_message = "Buffer cleared".to_string();
+            app.status_message = "Screen cleared".to_string();
         }
         "help" | "?" => {
             app.status_message =

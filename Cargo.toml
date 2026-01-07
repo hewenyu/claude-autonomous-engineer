@@ -26,6 +26,9 @@ crossterm = "0.28"
 # PTY 管理
 portable-pty = "0.8"
 
+# 终端仿真
+vt100 = "0.15"
+
 # 异步运行时
 tokio = { version = "1", features = ["full"] }
 
