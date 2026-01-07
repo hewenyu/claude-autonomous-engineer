@@ -16,6 +16,24 @@ pub mod service;
 use anyhow::Result;
 use std::path::{Path, PathBuf};
 
+/// 支持的代码文件扩展名（与 Tree-sitter 解析器对应）
+///
+/// 这是 repo_map 支持解析的语言列表，其他模块（如 watcher）应复用此定义
+pub const SUPPORTED_EXTENSIONS: &[&str] = &[
+    "rs",   // Rust
+    "py",   // Python
+    "go",   // Go
+    "ts",   // TypeScript
+    "tsx",  // TypeScript React
+    "js",   // JavaScript
+    "jsx",  // JavaScript React
+];
+
+/// 检查文件扩展名是否被支持
+pub fn is_supported_extension(ext: &str) -> bool {
+    SUPPORTED_EXTENSIONS.contains(&ext)
+}
+
 /// Repository Map 输出格式
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OutputFormat {
@@ -133,14 +151,10 @@ impl RepoMapper {
 
     /// 检查文件是否是支持的语言
     fn is_supported_language(&self, path: &Path) -> bool {
-        if let Some(ext) = path.extension() {
-            matches!(
-                ext.to_str(),
-                Some("rs" | "py" | "go" | "ts" | "tsx" | "js" | "jsx")
-            )
-        } else {
-            false
-        }
+        path.extension()
+            .and_then(|e| e.to_str())
+            .map(is_supported_extension)
+            .unwrap_or(false)
     }
 
     /// 提取文件符号

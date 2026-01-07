@@ -10,6 +10,8 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver};
 use std::time::Duration;
 
+use crate::repo_map::is_supported_extension;
+
 // ═══════════════════════════════════════════════════════════════════
 // 文件变更事件
 // ═══════════════════════════════════════════════════════════════════
@@ -63,13 +65,9 @@ impl FileChange {
             return FileChangeKind::Config;
         }
 
-        // 代码文件
-        let code_extensions = [
-            ".rs", ".py", ".go", ".ts", ".tsx", ".js", ".jsx", ".java", ".c", ".cpp", ".h", ".hpp",
-        ];
+        // 代码文件：使用 repo_map 支持的扩展名列表
         if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-            let ext_with_dot = format!(".{}", ext);
-            if code_extensions.iter().any(|&e| e == ext_with_dot) {
+            if is_supported_extension(ext) {
                 return FileChangeKind::Code;
             }
         }
